@@ -1,0 +1,1 @@
+launcher (still checks if python and dependencies are installed, but also launches the flasher in pyside6 format. not the cli terminal mode.
