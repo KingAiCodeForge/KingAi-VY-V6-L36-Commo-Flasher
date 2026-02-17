@@ -13,7 +13,18 @@ the c compiler assembler
 and virtual pcm and eeprom 
 
 
-## overview of the github and this script and how it relates to my other projects. python has better logging and faster dev time, easier to debug and test, isnt C so its sloppy and slower code on silicon. cant knock python.
+## overview of the github and this script and how it relates to my other projects.
+# python has better logging and faster dev time, easier to debug and test, isnt C
+# so its sloppy and slower code on silicon. cant knock python, 
+# this is the first aldl flash tool i have seen for vy v6 l36, 
+if you want to use any of my scripts and refactor and change addresses do so. 
+all could be edited a few address and names 
+and alot would work for older vn vp vr vs vt vx vy ecus 
+the dissasembly python scripts on my github across 3 vy v6 projects.
+c compiler and all stuff in there could be made into a other model by changing some addresses and names.
+not the flash tool,
+but the other scripts in each github.
+
 The first open-source flash tool for 68HC11 Delco ECUs.
 No other tool — in any language, on any platform — has ever done this publicly.
 The only comparable tool is closed-source VB.NET from 2010, distributed as
@@ -26,6 +37,7 @@ a Windows binary with no source code available anywhere.
 They said it wouldn't work. They made GitHub accounts just to say that.
 None of them posted a single correction, a single wrong address, or ran
 a single line of code. Just opinions with zero evidence.
+
 
 If you can read every topic on pcmhacking.net, remember every detail, and
 find a single incorrect address in this code — you can do what I did.
@@ -41,6 +53,18 @@ Context:
     UDIS) fails to correctly handle the 128KB bank-switched image — missing
     opcodes, wrong byte offsets, no separation of calibration vs code, and
     no auto-labelling from XDF definitions. I built my own.
+
+Flash Chip Compatibility:
+    The flash kernel and erase/write/verify routines are not AMD-specific.
+    All 128KB × 8-bit NOR flash chips used in these ECUs share the same
+    JEDEC standard command protocol — same sector geometry (8 × 16KB),
+    same erase sequence (AA→5555, 55→2AAA, 80→5555, 30→sector), same
+    byte program sequence (AA→5555, 55→2AAA, A0→5555, data→addr). The
+    seed/key security handshake is ECU-level, not chip-level.
+    Confirmed compatible:
+        AMD Am29F010      (0x01, 0x20) — original factory part
+        AMD Am29F040      (0x01, 0xA4) — 512KB variant, same command set
+        CAT/OnSemi 28F010 (0x31, 0xB4) — Intel-command compatible
 
 Related Projects:
     https://github.com/KingAiCodeForge/KingAi-VY-V6-L36-Commo-Flasher
