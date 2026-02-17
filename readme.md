@@ -194,3 +194,13 @@ What's NOT done yet:
 If you want to be the first to test on real hardware, do a Read ECU first to verify comms work,
 save that read as your backup, and keep a bench programmer handy. Start with a CAL-only write
 (1 sector, 16KB) before attempting a full BIN write (7 sectors, 104KB). 
+
+## Related Projects
+
+Other open-source tools for Delco 68HC11 ECU development by [KingAiCodeForge](https://github.com/KingAiCodeForge):
+
+| Repo | Description |
+|---|---|
+| [KingAi_68HC11_C_Compiler](https://github.com/KingAiCodeForge/KingAi_68HC11_C_Compiler) | C compiler targeting Motorola 68HC11 — write ECU patches in C instead of hand-assembled hex |
+| [kingaustraliagg-vy-l36-060a-enhanced-asm-patches](https://github.com/KingAiCodeForge/kingaustraliagg-vy-l36-060a-enhanced-asm-patches) | Assembly patches and reverse-engineered address map for VY V6 L36 $060A (92118883) |
+| [TunerPro-XDF-BIN-Universal-Exporter](https://github.com/KingAiCodeForge/TunerPro-XDF-BIN-Universal-Exporter) | Universal exporter for TunerPro XDF definitions and BIN data |
