@@ -7,6 +7,13 @@ by Jason King (pcmhacking.net: kingaustraliagg)
 Founder — KingAi Pty Ltd
 https://github.com/KingAiCodeForge
 
+Was this hard to do, no, to understand and remember everything, 
+and make the flasher and 
+the c compiler assembler 
+and virtual pcm and eeprom 
+
+
+## overview of the github and this script and how it relates to my other projects. python has better logging and faster dev time, easier to debug and test, isnt C so its sloppy and slower code on silicon. cant knock python.
 The first open-source flash tool for 68HC11 Delco ECUs.
 No other tool — in any language, on any platform — has ever done this publicly.
 The only comparable tool is closed-source VB.NET from 2010, distributed as
@@ -16,13 +23,33 @@ a Windows binary with no source code available anywhere.
     "Absolute pure junk" — GitHub Issue #2
     "Learn to tune"     — pcmhacking.net
 
-They said it wouldn't work. They made accounts just to say that.
-None of them posted a single correction, a single wrong address,
-or ran a single line of code. Just opinions with zero evidence.
-Meanwhile, no public developments exist for this platform —
-no shared addresses, no patching guides, no open disassembly.
-The people gatekeeping this knowledge don't publish anything.
-So I built the tools myself and open-sourced them.
+They said it wouldn't work. They made GitHub accounts just to say that.
+None of them posted a single correction, a single wrong address, or ran
+a single line of code. Just opinions with zero evidence.
+
+If you can read every topic on pcmhacking.net, remember every detail, and
+find a single incorrect address in this code — you can do what I did.
+If you can't, then stop pretending to be an expert and let the people
+doing the actual work get on with it.
+
+Context:
+    There is no active open-source development of custom OS or code patches
+    for VY V6 L36 ECUs. No public disassembly exists. No patching guides.
+    The few people who have done this work (chr0m3, the1, VL400, and others)
+    have not published their methods, addresses, or tools. Every existing
+    68HC11 disassembler I've tested (15+ tools including dis11, IDA Pro, and
+    UDIS) fails to correctly handle the 128KB bank-switched image — missing
+    opcodes, wrong byte offsets, no separation of calibration vs code, and
+    no auto-labelling from XDF definitions. I built my own.
+
+Related Projects:
+    https://github.com/KingAiCodeForge/KingAi-VY-V6-L36-Commo-Flasher
+    https://github.com/KingAiCodeForge/KingAi_68HC11_C_Compiler
+    https://github.com/KingAiCodeForge/kingaustraliagg-vy-l36-060a-enhanced-asm-patches
+
+Contributions welcome — open an issue or PR with corrections, improvements,
+or experience patching Delco ECUs.
+
 
 Target Hardware:
     ECU:    Delco/Delphi 68HC11F1
