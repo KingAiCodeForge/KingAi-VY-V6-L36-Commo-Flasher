@@ -169,6 +169,20 @@ $1C000-$1FFFF  80 ($50)  7    Boot sector ($1FFE0 = vectors, $1FFFE = RESET)
 **CAL write** erases sector 1 only ($4000-$7FFF calibration area).  
 **PROM write** erases all 8 sectors (full recovery, including boot).
 
+## Status (2026-02-17)
+
+**Virtual EEPROM capture is WORKING.** The full data path has been tested:
+
+```
+PC → ALDL Mode 6 (kernel upload) → ALDL Mode 16 (write data)
+→ LoopbackTransport → VirtualECUTransport → AMD29F010 state machine
+→ 128KB flash image (byte-for-byte match with source bin)
+```
+
+Tested in a 20-minute session with multiple read/write cycles. The virtual EEPROM correctly
+handles sector erase, byte programming, bank switching, and NOR flash rules. Read-back after
+write matches the source bin exactly.
+
 ---
 
-2026 Jason King (pcmhacking.net: kingaustraliagg)*
+2026 Jason King (pcmhacking.net: kingaustraliagg)

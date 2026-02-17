@@ -1,32 +1,43 @@
-## flash tool for holden vy ecotec v6 in car and bench.
+## Flash tool for Holden VY Ecotec V6 — in-car and bench
 
-# KingAI Commie Flasher
+# KingAI Commie Flasher v0.1.0
 
 > **The first open-source Python flash tool for 68HC11 Delco ECUs.**
 > No other Python tool on GitHub — or anywhere public — has ever written to flash on these ECUs.
 
-> **STATUS: VIRTUAL TESTING ONLY — NOT YET TESTED ON A REAL ECU**
+> **STATUS: VIRTUAL TESTING — NOT YET TESTED ON REAL HARDWARE**
 >
 > The flash protocol is implemented and matches the OSE Enhanced Flash Tool V1.5.1 algorithm exactly.
 > All code paths have been verified against the decompiled OSE source and tested with a Virtual ECU
 > (LoopbackTransport loaded with real 128KB bin files). The kernel bytecodes, bank switching, sector
 > erase sequences, and Mode 16 write framing are all confirmed correct in simulation.
 >
-> **However, this tool has not yet been connected to a physical ECU.**
+> **First successful virtual read/write session completed 2026-02-17** — 20-minute session with
+> multiple 128KB reads and writes through the full protocol stack (silence → unlock → kernel upload →
+> bank-switched read/write → verify → cleanup). Read speed: ~0.6–1.4 KB/s (uncapped virtual).
+> All 6 "Transaction failed" errors in that session were caused by a missing Mode 9 handler in the
+> LoopbackTransport — fixed in commit `84e3953`.
+>
+> **Open questions for hardware testing:**
+> - PySerial throughput over real wire — cap at 5 KB/s with 64-byte blocks, or lower?
+> - Minimum reliable block size (32 vs 64 bytes) before retry overhead dominates
+> - Power stability during sector erase (~1 second per 16 KB sector)
+>
+> **This tool has not yet been connected to a physical ECU.**
 > Until real-hardware testing is complete, use at your own risk. Keep a bench programmer (T48/TL866)
 > as backup. If you flash before I do and want to report results, open an issue.
 
 In-car flash read/write tool for the **Holden VY Ecotec V6** (Delco 68HC11F1, OS `$060A`, part number `92118883`).
 
-1:1 port to python of the OSE Enhanced Flash Tool V1.5.1
- VY in-car flash functionality as a single Python script with PySide6 GUI and full CLI backend. Supports PySerial and FTDI D2XX transports, with detailed logging and error handling. 
+1:1 port to Python of the OSE Enhanced Flash Tool V1.5.1 — VY in-car flash functionality as a single
+Python script with PySide6 GUI and full CLI backend. Supports PySerial and FTDI D2XX transports, with
+detailed logging and error handling.
 
-can be used in cli mode. or opened as a app/software on windows 10/11.
+Can be used in CLI mode or opened as a desktop app on Windows 10/11.
 
-if anyone wants me to add a .bat launcher or even a .exe with all dependencies bundled in, i can do that too, just ask. 
-tool now has other tools connected, i was going to keep it as a flash tool but couldnt help myself 
-
-theres more features you will see when you run it.
+If anyone wants a `.bat` launcher or a `.exe` with all dependencies bundled, just ask.
+The tool now includes a built-in 68HC11 disassembler, datalogger, table editor, and virtual ECU for
+offline testing.
 
 ## Target Hardware
 
@@ -151,101 +162,106 @@ Optional: `ftd2xx` for D2XX transport, `PySide6` for GUI (CLI works without it).
 
 ```
 kingai_commie_flasher/
-├── kingai_commie_flasher.py       # Main tool — GUI + CLI backend (~4100 lines)
+├── kingai_commie_flasher.py       # Main tool — GUI + CLI backend (~4200 lines, everything in one file)
+├── virtual_128kb_eeprom.py        # AMD 29F010 simulator — full state machine, byte program, sector erase
+├── readme.md
 ├── tools/
 │   ├── hc11_disassembler.py       # Standalone 68HC11 disassembler (311 opcodes, VY V6 annotations)
 │   ├── _verify_bytecodes.py       # Kernel bytecode verification tool
-│   └── virtual_aldl_frame_sender_and_vecu.py  # (planned) standalone vECU server
-├── virtual_128kb_eeprom.py        # Virtual 128KB EEPROM emulator
-├── readme.md
-├── logs/                          # Timestamped log output per session
+│   ├── virtual_aldl_frame_sender_and_vecu.py  # Standalone vECU ALDL server (for external testing)
+│   └── ALDL_read_RAM_commands.py  # ALDL RAM read reference tool
+├── kernel_ram_to_rom_write/
+│   ├── README.md                  # How the kernel→flash data path works, byte-for-byte
+│   └── output/                    # Captured flash images from write operations
+├── logs/                          # Timestamped session logs (auto-created)
 ├── tests/
-│   ├── test_kingai_commie_flasher.py
-│   └── conftest.py
+│   ├── test_kingai_commie_flasher.py  # 118 tests — protocol, framing, transport, kernel, vECU
+│   ├── test_vecu.py               # Virtual ECU integration tests
+│   ├── test_gui_functions.py      # GUI widget tests
+│   └── conftest.py                # Shared test fixtures
 └── ignore/                        # Research notes, bin files, algorithm comparison docs
+    ├── FLASH_TOOL_ALGORITHM_COMPARISON.md  # 6-tool algorithm extraction (OSE, PcmHammer, etc.)
+    ├── OSE_FLASH_TOOL_COMPLETE_ANALYSIS.md # Full 28,985-line decompilation analysis
+    ├── Live_tuning_ram_patch_plan.md       # Mode 10 RAM shadow write design
+    ├── ose_flash_tool_improvements_found.md # Weaknesses and improvement plan
+    ├── plan.md                             # Master plan — all protocols, roadmap, constants
+    └── gui_snippets.md                     # PySide6/Qt patterns and snippets
 ```
+
+## GUI
+
+PySide6 dark-theme desktop app with:
+
+- **Toolbar** — Connection (port, transport), Bin File (load/save), Flash controls (Read ECU, Write ECU, write mode combo)
+- **Tab 1: Dashboard** — 18 live sensor gauges (RPM, ECT, IAT, TPS, MAF, Spark, Knock, AFR, O2, STFT, LTFT, Battery, IAC, Injector PW, Wheel Speed)
+- **Tab 2: Table Editor** — Calibration table viewer (spark maps, fuel trim, OL AFR, TCC duty) from loaded bin
+- **Tab 3: Disassembler** — Built-in 68HC11 disassembler with VY V6 address annotations, paste hex or load from bin
+- **Tab 4: Log** — Real-time log viewer (same output as the log file, filterable)
+- **Tab 5: Options** — Connection settings, timing, retry/write settings, flash behaviour checkboxes
+
+Menu bar: File, Connection, Flash, Tools, View, Help
 
 ## Logging
 
-Every session writes a timestamped log to `logs/` with full frame-level detail — every byte sent and received, timing, retries, and errors. Log filenames include the timestamp so parallel sessions don't collide.
+Every session writes a timestamped log to `logs/` with full frame-level detail — every byte sent and
+received, timing, retries, and errors. Log filenames include the timestamp so parallel sessions don't
+collide. Console shows WARNING+ by default; log file records DEBUG+ (every TX/RX frame).
 
 ## Status
 
-## usage example for running in terminal cli
-help:
- (py) or:
-  python kingai_commie_flasher.py --help
+### What's Working (2026-02-17)
 
-  py kingai_commie_flasher.py gui
-
-
-usage: kingai_commie_flasher [-h] {gui,read,write,datalog,checksum,ports,info} ...
-
-KingAI Commie Flasher v0.1.0 — VY V6 ECU Flash/Read/Datalog/Tune Tool
-
-positional arguments:
-  {gui,read,write,datalog,checksum,ports,info}
-                        Command to run
-    gui                 Launch GUI interface
-    read                Read full bin from ECU
-    write               Write bin to ECU
-    datalog             Live data stream logging
-    checksum            Verify or fix bin checksum
-    ports               List available serial ports
-    info                Show ECU sensor info
-
-options:
-  -h, --help            show this help message and exit
-
-Examples:
-  kingai_commie_flasher gui                                    # Launch GUI
-  kingai_commie_flasher read --port COM3 --output read.bin     # Read ECU to file
-  kingai_commie_flasher write --port COM3 --input tune.bin     # Write bin to ECU
-  kingai_commie_flasher write --port COM3 --input tune.bin --mode CAL   # Cal-only write
-  kingai_commie_flasher datalog --port COM3                     # Live datalog to CSV
-  kingai_commie_flasher info --port COM3                        # Show ECU sensor values
-    info                Show ECU sensor info
-
-options:
-  -h, --help            show this help message and exit
-
-Examples:
-  kingai_commie_flasher gui                                    # Launch GUI
-  kingai_commie_flasher read --port COM3 --output read.bin     # Read ECU to file
-  kingai_commie_flasher write --port COM3 --input tune.bin     # Write bin to ECU
-  kingai_commie_flasher write --port COM3 --input tune.bin --mode CAL   # Cal-only write
-  kingai_commie_flasher datalog --port COM3                     # Live datalog to CSV
-  kingai_commie_flasher read --port COM3 --output read.bin     # Read ECU to file
-  kingai_commie_flasher write --port COM3 --input tune.bin     # Write bin to ECU
-  kingai_commie_flasher write --port COM3 --input tune.bin --mode CAL   # Cal-only write
-  kingai_commie_flasher datalog --port COM3                     # Live datalog to CSV
-  kingai_commie_flasher checksum --input file.bin               # Verify/fix checksum
-  kingai_commie_flasher ports                                   # List serial ports
-
-
-**Stage: Virtual testing — NOT tested on real hardware yet.**
-
-What's done:
-- Core flash read/write protocol implemented — 1:1 match with OSE V1.5.1 algorithm
-- Kernel upload, sector erase, bank-switched write, on-PCM checksum verify all implemented
-- Virtual ECU transport — load a real .bin and simulate full read/write cycles
-- Built-in 68HC11 disassembler with 311 opcodes and VY V6 address annotations
-- PySide6 GUI with Dashboard, Table Editor, Disassembler, Log, and Options tabs
+- Core flash read/write protocol — 1:1 match with OSE V1.5.1 algorithm
+- Kernel upload (3 blocks → RAM $0100/$0200/$0300), sector erase, bank-switched write
+- On-PCM checksum verify after write
+- Virtual ECU transport — load a real .bin, simulate full read/write/erase cycles
+- LoopbackTransport with all ALDL modes handled (1, 2, 3, 4, 5, 6, 8, 9, 10, 13, 16)
+- Heartbeat pre-seeded for instant virtual connect
+- Built-in 68HC11 disassembler (311 opcodes + VY V6 address annotations)
+- PySide6 GUI with 5 tabs (Dashboard, Table Editor, Disassembler, Log, Options)
 - Full CLI backend for headless operation
-- Tested against two real bin files (92118883 stock + $060A Enhanced v1.0a)
-- All bytecodes verified against decompiled OSE source
+- 118 automated tests passing
+- Mode 1 datalog (57 parameters → CSV)
+- Tested with 20-minute virtual session — multiple complete read/write cycles confirmed working
+- Read speed (virtual, uncapped): 0.6–1.4 KB/s across 128KB
 
-What's NOT done yet:
-- Real ECU hardware test (the big one)
-- EEPROM write support ($0E00-$0EFF — VIN/immobilizer area)
-- Pre-write backup read (safety feature)
-- Diff-write (flash only changed sectors)
-- Baud rate ramp after kernel upload (8192 → higher for faster writes)
-- Voltage monitoring during flash operations
+### What's NOT Done Yet
 
-If you want to be the first to test on real hardware, do a Read ECU first to verify comms work,
-save that read as your backup, and keep a bench programmer handy. Start with a CAL-only write
-(1 sector, 16KB) before attempting a full BIN write (7 sectors, 104KB). 
+- **Real ECU hardware test** (the big one)
+- **KB/s rate logging** — log throughput for every read/write operation
+- **Virtual baud rate cap** — throttle LoopbackTransport to realistic speeds (default 5 KB/s, configurable)
+- **Baud ramp after kernel upload** — 8192 → higher baud for faster data transfer
+- **Chaos test mode** — automated read→write→read→write loop until failure with configurable variables
+- **RAM flash tab** — Mode 10 live tune writes to RAM shadow (real-time calibration)
+- **Send ALDL command tab** — manual frame builder/sender like OSE's frmSendALDLFrame
+- **EEPROM write support** ($0E00-$0EFF — VIN/immobilizer area)
+- **Pre-write backup read** (safety feature)
+- **Diff-write** (flash only changed sectors)
+- **Partial CAL checksum** for padded calibration files
+- **Voltage monitoring** during flash operations
+
+### CLI Quick Reference
+
+```
+python kingai_commie_flasher.py gui                                    # Launch GUI
+python kingai_commie_flasher.py read --port COM3 --output read.bin     # Read ECU to file
+python kingai_commie_flasher.py write --port COM3 --input tune.bin     # Write bin to ECU  
+python kingai_commie_flasher.py write --port COM3 --input tune.bin --mode CAL   # Cal-only write
+python kingai_commie_flasher.py datalog --port COM3                     # Live datalog to CSV
+python kingai_commie_flasher.py info --port COM3                        # Show ECU sensor values
+python kingai_commie_flasher.py checksum --input file.bin               # Verify/fix checksum
+python kingai_commie_flasher.py ports                                   # List serial ports
+```
+
+### First Hardware Test Checklist
+
+If you want to be the first to test on real hardware:
+1. Do a **Read ECU** first to verify comms work
+2. Save that read as your backup
+3. Keep a bench programmer (T48/TL866) handy
+4. Start with a **CAL-only write** (1 sector, 16KB) before attempting a full BIN write (7 sectors, 104KB)
+
+
 
 ## Related Projects
 

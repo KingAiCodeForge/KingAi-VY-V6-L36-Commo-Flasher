@@ -111,7 +111,7 @@ WARNING:
     before flashing. Do NOT disconnect power during a write operation.
 
 Requires: Python 3.10+, pyserial
-Optional: PySide6 (GUI), ftd2xx (D2XX transport)
+Optional: PySide6 (GUI), ftd2xx (D2XX transport) havent tryed it yet
 
 MIT License
 
@@ -1144,6 +1144,8 @@ class LoopbackTransport(BaseTransport):
         self._unlocked = False
         self._vecu_mode = bin_path is not None
         self._bin_path = bin_path
+        self._active_write_bank: int = FlashBank.BANK_72  # Track which bank is selected for writes
+        self._write_bank_pcm_base: int = 0  # PCM base offset for current bank
 
         # Load the simulated flash image
         if bin_path and Path(bin_path).exists():
@@ -1160,6 +1162,73 @@ class LoopbackTransport(BaseTransport):
             log.info("Virtual ECU loaded %d KB from %s", len(self._simulated_bin) // 1024, bin_path)
         else:
             self._simulated_bin = bytearray(131072)  # 128KB zeros
+
+    # ── vEEPROM Management ─────────────────────────────────────────────
+
+    def reset_flash(self) -> None:
+        """Clear the virtual flash to all zeros (unloaded state)."""
+        self._simulated_bin = bytearray(131072)
+        log.info("vEEPROM: reset to all zeros (empty)")
+
+    def erase_flash(self) -> None:
+        """Erase the virtual flash to all 0xFF (simulates full chip erase)."""
+        self._simulated_bin = bytearray(b'\xFF' * 131072)
+        log.info("vEEPROM: erased to all 0xFF")
+
+    def load_flash(self, bin_data: bytearray) -> bool:
+        """Load a bin image into the virtual flash. Returns True on success."""
+        if len(bin_data) == 131072:
+            self._simulated_bin = bytearray(bin_data)
+            log.info("vEEPROM: loaded 128KB image")
+            return True
+        elif len(bin_data) == 16384:
+            self._simulated_bin = bytearray(b'\xFF' * 131072)
+            self._simulated_bin[0x4000:0x4000 + 16384] = bin_data
+            log.info("vEEPROM: loaded 16KB cal, padded to 128KB (0xFF fill)")
+            return True
+        else:
+            log.error("vEEPROM: invalid bin size %d (expected 128KB or 16KB)", len(bin_data))
+            return False
+
+    def export_flash(self) -> bytearray:
+        """Return a copy of the current virtual flash contents."""
+        return bytearray(self._simulated_bin)
+
+    def flash_info(self) -> dict:
+        """Return diagnostic info about the virtual flash state."""
+        import hashlib
+        sector_size = 16384  # 16KB
+        sectors = {}
+        for i in range(8):
+            start = i * sector_size
+            end = start + sector_size
+            sector_data = self._simulated_bin[start:end]
+            if all(b == 0xFF for b in sector_data):
+                sectors[i] = "erased"
+            elif all(b == 0x00 for b in sector_data):
+                sectors[i] = "empty"
+            else:
+                sectors[i] = "used"
+
+        # Compute bin checksum (same as BinFile.compute_checksum)
+        cs_sum = 0
+        for addr in range(0x2000, 0x20000):
+            if 0x4006 <= addr <= 0x4007:
+                continue
+            cs_sum = (cs_sum + self._simulated_bin[addr]) & 0xFFFF
+
+        sha = hashlib.sha256(self._simulated_bin).hexdigest()
+
+        return {
+            "size": len(self._simulated_bin),
+            "sectors": sectors,
+            "sectors_used": sum(1 for s in sectors.values() if s == "used"),
+            "sectors_erased": sum(1 for s in sectors.values() if s == "erased"),
+            "checksum": cs_sum,
+            "stored_checksum": (self._simulated_bin[0x4006] << 8) | self._simulated_bin[0x4007],
+            "sha256": sha,
+            "source_file": self._bin_path,
+        }
 
     def open(self) -> None:
         self._opened = True
@@ -1196,6 +1265,38 @@ class LoopbackTransport(BaseTransport):
     @property
     def bytes_available(self) -> int:
         return len(self._rx_buffer)
+
+    def _sector_to_file_offset(self, bank: int, sector_byte: int) -> Optional[int]:
+        """Map (bank, sector_byte) to flat file offset for sector erase.
+
+        Each sector is 16KB. The sector_byte encodes the sector address within the bank
+        (the high byte of the 16-bit base address within the 64KB bank window).
+
+        Returns the flat 128KB file offset for the start of the sector, or None if invalid.
+        """
+        # Build lookup from the ERASE_MAP constants and known sector geometry
+        # Bank 72 ($48): sectors 0-3, direct mapping (file offset = bank offset)
+        #   sector $00 → file $00000  (sector 0)
+        #   sector $40 → file $04000  (sector 1, CAL)
+        #   sector $80 → file $08000  (sector 2)
+        #   sector $C0 → file $0C000  (sector 3)
+        # Bank 88 ($58): sectors 4-5, file offset = bank offset + $10000
+        #   sector $80 → file $10000  (sector 4)
+        #   sector $C0 → file $14000  (sector 5)
+        # Bank 80 ($50): sectors 6-7, file offset = bank offset + $18000
+        #   sector $80 → file $18000  (sector 6)
+        #   sector $C0 → file $1C000  (sector 7)
+        _map = {
+            (FlashBank.BANK_72, FlashSector.SECTOR_0): 0x00000,
+            (FlashBank.BANK_72, FlashSector.SECTOR_1): 0x04000,
+            (FlashBank.BANK_72, FlashSector.SECTOR_2): 0x08000,
+            (FlashBank.BANK_72, FlashSector.SECTOR_3): 0x0C000,
+            (FlashBank.BANK_88, FlashSector.SECTOR_4): 0x10000,
+            (FlashBank.BANK_88, FlashSector.SECTOR_5): 0x14000,
+            (FlashBank.BANK_80, FlashSector.SECTOR_6): 0x18000,
+            (FlashBank.BANK_80, FlashSector.SECTOR_7): 0x1C000,
+        }
+        return _map.get((bank, sector_byte))
 
     def _simulate_response(self, data: bytes) -> None:
         """Generate simulated ECU responses based on sent frames."""
@@ -1234,6 +1335,34 @@ class LoopbackTransport(BaseTransport):
             self._rx_buffer.extend(resp)
 
         elif mode == ALDLMode.MODE6_UPLOAD:
+            # Detect if this is an erase frame or write-bank-setup frame
+            # Erase frame: length byte = 0xBF (191), bank at byte[105], sector at byte[106]
+            # Write bank frame: length byte = 0xF1 (241), bank at byte[157]
+            length_byte = data[1] if len(data) > 1 else 0
+            if length_byte == 0xBF and len(data) >= 108:
+                # Erase frame — simulate sector erase by setting 16KB to 0xFF
+                bank = data[105]
+                sector_byte = data[106]
+                # Map (bank, sector_byte) to flat file offset
+                # Sector addresses: 0x00=sector0, 0x40=sector1, 0x80=sector2/6, 0xC0=sector3/5/7
+                sector_base = self._sector_to_file_offset(bank, sector_byte)
+                if sector_base is not None:
+                    for addr in range(sector_base, sector_base + 16384):
+                        self._simulated_bin[addr] = 0xFF
+                    log.debug("vEEPROM: erased sector at $%05X-$%05X (bank=0x%02X, sector=0x%02X)",
+                              sector_base, sector_base + 16383, bank, sector_byte)
+            elif length_byte == 0xF1 and len(data) >= 158:
+                # Write bank setup — track the active write bank for Mode 16 remapping
+                self._active_write_bank = data[157]
+                # Determine PCM base offset for address remapping
+                if self._active_write_bank == FlashBank.BANK_72:
+                    self._write_bank_pcm_base = 0
+                elif self._active_write_bank == FlashBank.BANK_88:
+                    self._write_bank_pcm_base = 0x8000
+                elif self._active_write_bank == FlashBank.BANK_80:
+                    self._write_bank_pcm_base = 0x10000
+                log.debug("vEEPROM: write bank set to 0x%02X (pcm_base=$%05X)",
+                          self._active_write_bank, self._write_bank_pcm_base)
             resp = bytearray([device_id, 0x57, 0x06, 0xAA])
             cs = (256 - sum(resp) % 256) & 0xFF
             resp.append(cs)
@@ -1312,7 +1441,25 @@ class LoopbackTransport(BaseTransport):
             self._rx_buffer.extend(resp)
 
         elif mode == ALDLMode.MODE16_FLASH_WRITE:
-            # Simulate write: update the in-memory bin image
+            # Simulate write: parse address + data from frame, write to vEEPROM
+            # Frame format: [device_id, length, 0x10, addr_hi, addr_mid, addr_lo, data..., checksum]
+            if len(data) >= 7:
+                pcm_addr = (data[3] << 16) | (data[4] << 8) | data[5]
+                payload = data[6:-1]  # everything between address and checksum
+                if len(payload) > 0:
+                    # Reverse the address remapping to get flat file offset
+                    # write_flash_data does: pcm_addr = file_addr - pcm_base_offset
+                    # So: file_addr = pcm_addr + pcm_base_offset
+                    flat_base = pcm_addr + self._write_bank_pcm_base
+                    for i, b in enumerate(payload):
+                        flat_addr = flat_base + i
+                        if 0 <= flat_addr < len(self._simulated_bin):
+                            # NOR flash AND rule: can only clear bits (1→0)
+                            # Erased bytes are 0xFF, programming ANDs with new data
+                            self._simulated_bin[flat_addr] &= b
+                    log.debug("vEEPROM: wrote %d bytes at PCM $%05X → file $%05X (bank 0x%02X)",
+                              len(payload), pcm_addr, flat_base, self._active_write_bank)
+            # ACK
             resp = bytearray([device_id, 0x57, ALDLMode.MODE16_FLASH_WRITE, 0xAA])
             cs = (256 - sum(resp) % 256) & 0xFF
             resp.append(cs)
@@ -2011,6 +2158,31 @@ class BinFile:
         Path(path).write_bytes(bytes(data))
 
     @staticmethod
+    def save_cal(path: str, data: bytearray, padded: bool = True) -> None:
+        """
+        Save calibration data from a 128KB bin.
+
+        Args:
+            path:   Output file path (.cal)
+            data:   Full 128KB bin image
+            padded: If True, saves 128KB file with cal at $4000 and zeros elsewhere
+                    (TunerPro-compatible). If False, saves raw 16KB cal data only.
+        """
+        if padded:
+            # 128KB file: zeros everywhere except $4000-$7FFF
+            cal_out = bytearray(BinFile.BIN_SIZE)
+            cal_out[BinFile.CAL_OFFSET:BinFile.CAL_OFFSET + BinFile.CAL_SIZE] = \
+                data[BinFile.CAL_OFFSET:BinFile.CAL_OFFSET + BinFile.CAL_SIZE]
+            Path(path).write_bytes(bytes(cal_out))
+            log.info("Saved padded 128KB cal to %s (cal at $%04X-$%04X)",
+                     path, BinFile.CAL_OFFSET, BinFile.CAL_OFFSET + BinFile.CAL_SIZE - 1)
+        else:
+            # Raw 16KB cal data only
+            cal_data = data[BinFile.CAL_OFFSET:BinFile.CAL_OFFSET + BinFile.CAL_SIZE]
+            Path(path).write_bytes(bytes(cal_data))
+            log.info("Saved raw 16KB cal to %s", path)
+
+    @staticmethod
     def compute_checksum(data: bytearray) -> int:
         """
         Compute the VXY checksum for a bin file.
@@ -2112,6 +2284,67 @@ class FlashOp:
     def __init__(self, comm: ECUComm):
         self.comm = comm
         self._backup_bin: Optional[bytearray] = None
+        self._stats: Dict[str, Any] = {}
+
+    def _log_session_summary(self) -> None:
+        """Log a formatted summary of the completed flash operation."""
+        s = self._stats
+        if not s:
+            return
+
+        lines = [
+            "╔══════════════════════════════════════════════════════════╗",
+            "║              FLASH SESSION SUMMARY                      ║",
+            "╠══════════════════════════════════════════════════════════╣",
+        ]
+
+        op = s.get("operation", "?")
+        mode = s.get("mode", "?")
+        lines.append(f"║  Operation:       {op} ({mode})")
+        lines.append(f"║  Transport:       {s.get('transport', '?')}")
+        lines.append(f"║  Baud Rate:       {s.get('baud_rate', '?')}")
+
+        if "address_range" in s:
+            lines.append(f"║  Address Range:   {s['address_range']}")
+        if "sectors_erased" in s:
+            lines.append(f"║  Sectors Erased:  {s['sectors_erased']}")
+
+        lines.append(f"║  Bytes:           {s.get('bytes_transferred', 0):,}")
+
+        if "read_block_size" in s:
+            lines.append(f"║  Read Block Size: {s['read_block_size']} bytes")
+        if "write_chunk_size" in s:
+            lines.append(f"║  Write Chunk:     {s['write_chunk_size']} bytes")
+
+        lines.append(f"║  Total Frames:    {s.get('total_frames', '?')}")
+        if "successful_frames" in s:
+            lines.append(f"║  Successful:      {s['successful_frames']}")
+        if "failed_frames" in s and s["failed_frames"] > 0:
+            lines.append(f"║  Failed:          {s['failed_frames']}  ⚠")
+        if "write_retries" in s and s["write_retries"] > 0:
+            lines.append(f"║  Write Retries:   {s['write_retries']}")
+
+        elapsed = s.get("elapsed_seconds", 0)
+        kbps = s.get("throughput_kbps", 0)
+        eff = s.get("baud_efficiency_pct", 0)
+        lines.append(f"║  Elapsed:         {elapsed:.2f}s")
+        lines.append(f"║  Throughput:      {kbps:.2f} kbps")
+        lines.append(f"║  Baud Efficiency: {eff:.1f}%")
+
+        if s.get("high_speed"):
+            lines.append(f"║  High-Speed Read: YES")
+        if s.get("checksum_verified"):
+            lines.append(f"║  Checksum:        VERIFIED ✓")
+
+        if "failed_frames" in s and s["failed_frames"] > 0:
+            lines.append("║")
+            lines.append(f"║  ⚠  {s['failed_frames']} read failures during operation")
+
+        lines.append("╚══════════════════════════════════════════════════════════╝")
+
+        for line in lines:
+            self.comm.emit("log", msg=line, level="info")
+            log.info(line)
 
     def full_read(self) -> Optional[bytearray]:
         """Read the full 128KB bin from the ECU."""
@@ -2174,6 +2407,29 @@ class FlashOp:
         self.comm.enable_chatter()
 
         elapsed = time.monotonic() - start_time
+        failed_reads = total_reads - reads_done
+        bytes_read = BinFile.BIN_SIZE
+        kbps = (bytes_read * 8 / 1000) / elapsed if elapsed > 0 else 0
+        baud_efficiency = (kbps * 1000) / self.comm.config.baud * 100 if self.comm.config.baud else 0
+
+        # ── Flash Session Summary ──
+        self._stats = {
+            "operation": "READ",
+            "mode": "FULL",
+            "bytes_transferred": bytes_read,
+            "read_block_size": read_block,
+            "total_frames": total_reads,
+            "successful_frames": reads_done,
+            "failed_frames": failed_reads,
+            "baud_rate": self.comm.config.baud,
+            "elapsed_seconds": round(elapsed, 2),
+            "throughput_kbps": round(kbps, 2),
+            "baud_efficiency_pct": round(baud_efficiency, 1),
+            "transport": type(self.comm.transport).__name__,
+            "high_speed": self.comm.config.high_speed_read,
+        }
+        self._log_session_summary()
+
         self.comm.emit("log", msg=f"═══ READ COMPLETE ({elapsed:.1f}s) ═══", level="info")
         return bin_data
 
@@ -2279,6 +2535,30 @@ class FlashOp:
         self.comm.enable_chatter()
 
         elapsed = time.monotonic() - start_time
+        bytes_written = end_offset - start_offset + 1
+        kbps = (bytes_written * 8 / 1000) / elapsed if elapsed > 0 else 0
+        baud_efficiency = (kbps * 1000) / self.comm.config.baud * 100 if self.comm.config.baud else 0
+        total_write_frames = (bytes_written + self.comm.config.write_chunk_size - 1) // self.comm.config.write_chunk_size
+
+        # ── Flash Session Summary ──
+        self._stats = {
+            "operation": "WRITE",
+            "mode": mode,
+            "bytes_transferred": bytes_written,
+            "write_chunk_size": self.comm.config.write_chunk_size,
+            "address_range": f"${start_offset:05X}-${end_offset:05X}",
+            "sectors_erased": len(erase_map),
+            "total_frames": total_write_frames,
+            "write_retries": write_attempts,
+            "baud_rate": self.comm.config.baud,
+            "elapsed_seconds": round(elapsed, 2),
+            "throughput_kbps": round(kbps, 2),
+            "baud_efficiency_pct": round(baud_efficiency, 1),
+            "transport": type(self.comm.transport).__name__,
+            "checksum_verified": True,
+        }
+        self._log_session_summary()
+
         self.comm.emit("log", msg=f"═══ {mode} WRITE COMPLETE ({elapsed:.1f}s) ═══", level="info")
         return True
 
@@ -3374,7 +3654,10 @@ if GUI_AVAILABLE:
             self.state_label = QLabel("DISCONNECTED")
             self.state_label.setStyleSheet("color: #f44; font-weight: bold;")
             self.rate_label = QLabel("")
+            self.veeprom_status_label = QLabel("")
+            self.veeprom_status_label.setStyleSheet("color: #888;")
             self.status_bar.addWidget(self.state_label)
+            self.status_bar.addPermanentWidget(self.veeprom_status_label)
             self.status_bar.addPermanentWidget(self.rate_label)
 
             # ── Dashboard update timer ──
@@ -3406,6 +3689,11 @@ if GUI_AVAILABLE:
             self.action_save_as.setEnabled(False)
             file_menu.addAction(self.action_save_as)
 
+            self.action_save_cal = QAction("Save .&cal...", self)
+            self.action_save_cal.setStatusTip("Save calibration area ($4000-$7FFF) as .cal file")
+            self.action_save_cal.setEnabled(False)
+            file_menu.addAction(self.action_save_cal)
+
             file_menu.addSeparator()
 
             self.action_exit = QAction("E&xit", self)
@@ -3426,6 +3714,53 @@ if GUI_AVAILABLE:
             self.action_refresh_ports.setShortcut("F5")
             self.action_refresh_ports.setStatusTip("Refresh the list of available serial ports")
             conn_menu.addAction(self.action_refresh_ports)
+
+            conn_menu.addSeparator()
+
+            # ── vEEPROM submenu (Virtual ECU flash image management) ──
+            self.veeprom_menu = conn_menu.addMenu("v&EEPROM")
+            self.veeprom_menu.setStatusTip("Virtual EEPROM management — only available in Virtual ECU mode")
+
+            self.action_veeprom_load = QAction("&Load .bin to vEEPROM...", self)
+            self.action_veeprom_load.setShortcut("Ctrl+Shift+L")
+            self.action_veeprom_load.setStatusTip(
+                "Load a .bin file into the virtual flash image. "
+                "If connected to vECU, hot-reloads immediately. If not, stores path for next connect."
+            )
+            self.veeprom_menu.addAction(self.action_veeprom_load)
+
+            self.action_veeprom_unload = QAction("&Unload vEEPROM", self)
+            self.action_veeprom_unload.setShortcut("Ctrl+Shift+U")
+            self.action_veeprom_unload.setStatusTip("Clear vEEPROM to all zeros (empty, no data)")
+            self.action_veeprom_unload.setEnabled(False)
+            self.veeprom_menu.addAction(self.action_veeprom_unload)
+
+            self.action_veeprom_erase = QAction("&Erase vEEPROM", self)
+            self.action_veeprom_erase.setShortcut("Ctrl+Shift+E")
+            self.action_veeprom_erase.setStatusTip(
+                "Erase vEEPROM to all 0xFF — simulates a full chip erase. "
+                "Data can be programmed after erase (NOR flash: can only clear bits 1→0)."
+            )
+            self.action_veeprom_erase.setEnabled(False)
+            self.veeprom_menu.addAction(self.action_veeprom_erase)
+
+            self.action_veeprom_export = QAction("E&xport vEEPROM to .bin...", self)
+            self.action_veeprom_export.setShortcut("Ctrl+Shift+X")
+            self.action_veeprom_export.setStatusTip(
+                "Save the current vEEPROM contents to a .bin file — "
+                "captures whatever has been written/patched since loading."
+            )
+            self.action_veeprom_export.setEnabled(False)
+            self.veeprom_menu.addAction(self.action_veeprom_export)
+
+            self.veeprom_menu.addSeparator()
+
+            self.action_veeprom_info = QAction("vEEPROM &Info", self)
+            self.action_veeprom_info.setStatusTip(
+                "Show vEEPROM diagnostics: sectors used/erased, checksum, SHA-256, source file"
+            )
+            self.action_veeprom_info.setEnabled(False)
+            self.veeprom_menu.addAction(self.action_veeprom_info)
 
             # ── Flash menu ──
             flash_menu = menu_bar.addMenu("F&lash")
@@ -3562,6 +3897,7 @@ if GUI_AVAILABLE:
             self.action_load.triggered.connect(self._load_bin)
             self.action_save.triggered.connect(self._save_bin)
             self.action_save_as.triggered.connect(self._save_bin)
+            self.action_save_cal.triggered.connect(self._save_cal)
             self.action_connect.triggered.connect(self._toggle_connect)
             self.action_refresh_ports.triggered.connect(self._refresh_ports)
             self.action_read_ecu.triggered.connect(self._read_ecu)
@@ -3585,6 +3921,13 @@ if GUI_AVAILABLE:
             )
             self.action_about.triggered.connect(self._show_about)
 
+            # ── vEEPROM menu actions ──
+            self.action_veeprom_load.triggered.connect(self._veeprom_load)
+            self.action_veeprom_unload.triggered.connect(self._veeprom_unload)
+            self.action_veeprom_erase.triggered.connect(self._veeprom_erase)
+            self.action_veeprom_export.triggered.connect(self._veeprom_export)
+            self.action_veeprom_info.triggered.connect(self._veeprom_info)
+
         def _refresh_ports(self) -> None:
             self.port_combo.clear()
             transport_type = self.transport_combo.currentData()
@@ -3599,8 +3942,9 @@ if GUI_AVAILABLE:
                 self.port_combo.addItem("(no ports found)")
 
         def _on_transport_changed(self, _index: int) -> None:
-            """Update port combo when transport type changes."""
+            """Update port combo and vEEPROM menu when transport type changes."""
             self._refresh_ports()
+            self._update_veeprom_menu_state()
 
         def _toggle_connect(self) -> None:
             if self._comm and self._comm.transport.is_open:
@@ -3706,6 +4050,35 @@ if GUI_AVAILABLE:
                 BinFile.fix_checksum(self._bin_data)
                 BinFile.save(path, self._bin_data)
                 self.log_widget.append_log(f"Saved: {Path(path).name}", "info")
+
+        def _save_cal(self) -> None:
+            """Save calibration data ($4000-$7FFF) as a .cal file."""
+            if not self._bin_data:
+                return
+            default_name = ""
+            if self._bin_path:
+                default_name = str(Path(self._bin_path).with_suffix(".cal"))
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Save Calibration File",
+                default_name,
+                "Cal Files (*.cal);;Bin Files (*.bin);;All Files (*)"
+            )
+            if not path:
+                return
+
+            # Ask padded vs raw
+            reply = QMessageBox.question(
+                self, "CAL File Format",
+                "Pad calibration to 128KB?\n\n"
+                "YES = 128KB file with cal at $4000 (TunerPro compatible)\n"
+                "NO  = Raw 16KB calibration data only",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,  # default to padded
+            )
+            padded = (reply == QMessageBox.Yes)
+            BinFile.save_cal(path, self._bin_data, padded=padded)
+            size_str = "128KB padded" if padded else "16KB raw"
+            self.log_widget.append_log(f"Saved cal ({size_str}): {Path(path).name}", "info")
 
         def _read_ecu(self) -> None:
             if not self._comm:
@@ -3897,8 +4270,168 @@ if GUI_AVAILABLE:
             self.action_write_cal.setEnabled(connected and has_bin)
             self.action_save.setEnabled(has_bin)
             self.action_save_as.setEnabled(has_bin)
+            self.action_save_cal.setEnabled(has_bin)
             self.action_checksum.setEnabled(has_bin)
             self.action_ecu_info.setEnabled(connected)
+            self._update_veeprom_menu_state()
+
+        def _update_veeprom_menu_state(self) -> None:
+            """Enable/disable vEEPROM menu items based on transport mode and connection state."""
+            is_vecu = (self.transport_combo.currentData() == "vecu")
+            is_connected_vecu = (
+                is_vecu and self._comm is not None
+                and self._comm.transport.is_open
+                and isinstance(self._comm.transport, LoopbackTransport)
+            )
+            has_flash = (
+                is_connected_vecu
+                and hasattr(self._comm.transport, '_simulated_bin')
+                and not all(b == 0x00 for b in self._comm.transport._simulated_bin[:256])
+            )
+
+            # "Load .bin to vEEPROM" — always enabled when in vECU mode (can pre-load before connect)
+            self.action_veeprom_load.setEnabled(is_vecu)
+
+            # These require an active vECU connection with data loaded
+            self.action_veeprom_unload.setEnabled(is_connected_vecu and has_flash)
+            self.action_veeprom_erase.setEnabled(is_connected_vecu and has_flash)
+            self.action_veeprom_export.setEnabled(is_connected_vecu and has_flash)
+            self.action_veeprom_info.setEnabled(is_connected_vecu)
+
+            # Grey out entire submenu when not in vECU mode
+            self.veeprom_menu.setEnabled(is_vecu)
+            if not is_vecu:
+                self.veeprom_menu.setToolTip("vEEPROM is only available in Virtual ECU mode")
+                self.veeprom_status_label.setText("")
+            else:
+                self.veeprom_menu.setToolTip("")
+                # Update status bar label
+                if is_connected_vecu and has_flash:
+                    src = Path(self._vecu_bin_path).name if self._vecu_bin_path else "unknown"
+                    self.veeprom_status_label.setText(f"vEEPROM: loaded ({src})")
+                    self.veeprom_status_label.setStyleSheet("color: #4f4;")
+                elif is_connected_vecu:
+                    # Connected but flash is empty/erased
+                    transport = self._comm.transport
+                    if all(b == 0xFF for b in transport._simulated_bin[:256]):
+                        self.veeprom_status_label.setText("vEEPROM: erased")
+                        self.veeprom_status_label.setStyleSheet("color: #ff4;")
+                    else:
+                        self.veeprom_status_label.setText("vEEPROM: empty")
+                        self.veeprom_status_label.setStyleSheet("color: #888;")
+                elif self._vecu_bin_path:
+                    fname = Path(self._vecu_bin_path).name
+                    self.veeprom_status_label.setText(f"vEEPROM: queued ({fname})")
+                    self.veeprom_status_label.setStyleSheet("color: #88f;")
+                else:
+                    self.veeprom_status_label.setText("vEEPROM: not loaded")
+                    self.veeprom_status_label.setStyleSheet("color: #888;")
+
+        # ── vEEPROM Handlers ──────────────────────────────────────────
+
+        def _veeprom_load(self) -> None:
+            """Load a .bin file into the virtual flash image."""
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Load .bin to vEEPROM", "",
+                "Bin Files (*.bin);;Cal Files (*.cal);;All Files (*)"
+            )
+            if not path:
+                return
+
+            try:
+                raw = Path(path).read_bytes()
+            except Exception as e:
+                self.log_widget.append_log(f"vEEPROM load failed: {e}", "error")
+                return
+
+            fname = Path(path).name
+
+            # If connected to vECU, hot-reload into the transport
+            if (self._comm and self._comm.transport.is_open
+                    and isinstance(self._comm.transport, LoopbackTransport)):
+                if self._comm.transport.load_flash(bytearray(raw)):
+                    self._vecu_bin_path = path
+                    self.log_widget.append_log(
+                        f"vEEPROM: hot-loaded {fname} ({len(raw)} bytes)", "success"
+                    )
+                else:
+                    self.log_widget.append_log(
+                        f"vEEPROM: invalid size {len(raw)} — expected 128KB or 16KB", "error"
+                    )
+                    return
+            else:
+                # Not connected yet — store path for next vECU connect
+                self._vecu_bin_path = path
+                self.log_widget.append_log(
+                    f"vEEPROM: queued {fname} for next Virtual ECU connect", "info"
+                )
+
+            self._update_veeprom_menu_state()
+
+        def _veeprom_unload(self) -> None:
+            """Clear vEEPROM to all zeros."""
+            if not (self._comm and isinstance(self._comm.transport, LoopbackTransport)):
+                return
+            self._comm.transport.reset_flash()
+            self.log_widget.append_log("vEEPROM: unloaded — all zeros", "info")
+            self._update_veeprom_menu_state()
+
+        def _veeprom_erase(self) -> None:
+            """Erase vEEPROM to all 0xFF (simulates full chip erase)."""
+            if not (self._comm and isinstance(self._comm.transport, LoopbackTransport)):
+                return
+            self._comm.transport.erase_flash()
+            self.log_widget.append_log("vEEPROM: erased — all 0xFF", "info")
+            self._update_veeprom_menu_state()
+
+        def _veeprom_export(self) -> None:
+            """Export current vEEPROM contents to a .bin file."""
+            if not (self._comm and isinstance(self._comm.transport, LoopbackTransport)):
+                return
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Export vEEPROM to .bin", "veeprom_export.bin",
+                "Bin Files (*.bin);;All Files (*)"
+            )
+            if not path:
+                return
+            try:
+                flash_data = self._comm.transport.export_flash()
+                Path(path).write_bytes(flash_data)
+                self.log_widget.append_log(
+                    f"vEEPROM: exported {len(flash_data)} bytes to {Path(path).name}", "success"
+                )
+            except Exception as e:
+                self.log_widget.append_log(f"vEEPROM export failed: {e}", "error")
+
+        def _veeprom_info(self) -> None:
+            """Show vEEPROM diagnostic info dialog."""
+            if not (self._comm and isinstance(self._comm.transport, LoopbackTransport)):
+                return
+            info = self._comm.transport.flash_info()
+            sector_lines = []
+            for idx in range(8):
+                status = info["sectors"].get(idx, "unknown")
+                icon = {"used": "█", "erased": "░", "empty": "○"}.get(status, "?")
+                sector_lines.append(f"  Sector {idx}: {icon} {status}")
+
+            cs_match = "✓ MATCH" if info["checksum"] == info["stored_checksum"] else "✗ MISMATCH"
+            msg = (
+                f"<pre>"
+                f"vEEPROM Flash Info\n"
+                f"{'─' * 40}\n"
+                f"Size:            {info['size']:,} bytes ({info['size'] // 1024} KB)\n"
+                f"Source:          {info['source_file'] or '(none)'}\n"
+                f"Sectors used:    {info['sectors_used']} / 8\n"
+                f"Sectors erased:  {info['sectors_erased']} / 8\n"
+                f"\n"
+                f"{''.join(chr(10).join(sector_lines))}\n"
+                f"\n"
+                f"Computed checksum: ${info['checksum']:04X}\n"
+                f"Stored checksum:   ${info['stored_checksum']:04X}  {cs_match}\n"
+                f"SHA-256: {info['sha256'][:32]}...\n"
+                f"</pre>"
+            )
+            QMessageBox.information(self, "vEEPROM Info", msg)
 
         def closeEvent(self, event) -> None:
             if self._logger and self._logger.running:
