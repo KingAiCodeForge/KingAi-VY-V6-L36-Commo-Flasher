@@ -171,6 +171,58 @@ Every session writes a timestamped log to `logs/` with full frame-level detail �
 
 ## Status
 
+## usage example for running in terminal cli
+help:
+ (py) or:
+  python kingai_commie_flasher.py --help
+
+  py kingai_commie_flasher.py gui
+
+
+usage: kingai_commie_flasher [-h] {gui,read,write,datalog,checksum,ports,info} ...
+
+KingAI Commie Flasher v0.1.0 — VY V6 ECU Flash/Read/Datalog/Tune Tool
+
+positional arguments:
+  {gui,read,write,datalog,checksum,ports,info}
+                        Command to run
+    gui                 Launch GUI interface
+    read                Read full bin from ECU
+    write               Write bin to ECU
+    datalog             Live data stream logging
+    checksum            Verify or fix bin checksum
+    ports               List available serial ports
+    info                Show ECU sensor info
+
+options:
+  -h, --help            show this help message and exit
+
+Examples:
+  kingai_commie_flasher gui                                    # Launch GUI
+  kingai_commie_flasher read --port COM3 --output read.bin     # Read ECU to file
+  kingai_commie_flasher write --port COM3 --input tune.bin     # Write bin to ECU
+  kingai_commie_flasher write --port COM3 --input tune.bin --mode CAL   # Cal-only write
+  kingai_commie_flasher datalog --port COM3                     # Live datalog to CSV
+  kingai_commie_flasher info --port COM3                        # Show ECU sensor values
+    info                Show ECU sensor info
+
+options:
+  -h, --help            show this help message and exit
+
+Examples:
+  kingai_commie_flasher gui                                    # Launch GUI
+  kingai_commie_flasher read --port COM3 --output read.bin     # Read ECU to file
+  kingai_commie_flasher write --port COM3 --input tune.bin     # Write bin to ECU
+  kingai_commie_flasher write --port COM3 --input tune.bin --mode CAL   # Cal-only write
+  kingai_commie_flasher datalog --port COM3                     # Live datalog to CSV
+  kingai_commie_flasher read --port COM3 --output read.bin     # Read ECU to file
+  kingai_commie_flasher write --port COM3 --input tune.bin     # Write bin to ECU
+  kingai_commie_flasher write --port COM3 --input tune.bin --mode CAL   # Cal-only write
+  kingai_commie_flasher datalog --port COM3                     # Live datalog to CSV
+  kingai_commie_flasher checksum --input file.bin               # Verify/fix checksum
+  kingai_commie_flasher ports                                   # List serial ports
+
+
 **Stage: Virtual testing — NOT tested on real hardware yet.**
 
 What's done:

@@ -502,6 +502,7 @@ class TestLoopbackTransport:
         assert len(resp) > 0
 
     def test_flush_clears_buffer(self, loopback_transport):
+        loopback_transport.flush_input()  # clear any pre-seeded bytes (e.g. heartbeat)
         loopback_transport._rx_buffer.extend(b"\x00\x01\x02")
         assert loopback_transport.bytes_available == 3
         loopback_transport.flush_input()

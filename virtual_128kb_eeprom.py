@@ -31,11 +31,88 @@ MIT License — Copyright (c) 2026 Jason King (pcmhacking.net: kingaustraliagg)
 
 from __future__ import annotations
 import logging
+import sys
 from pathlib import Path
+from datetime import datetime
 from enum import Enum, auto
 from typing import Optional, List, Tuple
 
-log = logging.getLogger("vecu.flash")
+# ── Logging Setup (merged from ignore/log_setup.py — same pattern as kingai_commie_flasher.py) ──
+LOG_DIR = Path(__file__).resolve().parent / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+try:
+    from rich.logging import RichHandler
+    RICH_LOGGING_AVAILABLE = True
+except ImportError:
+    RICH_LOGGING_AVAILABLE = False
+
+
+def setup_logging(
+    name: str = "vecu.flash",
+    level: int = logging.DEBUG,
+    console_level: int = logging.WARNING,
+    log_dir: Optional[Path] = None,
+    rich_console: bool = True,
+) -> logging.Logger:
+    """
+    Configure and return a logger.
+
+    Merged from ignore/log_setup.py — same pattern used by
+    kingai_commie_flasher.py so all logs land in the same logs/ folder
+    with the same format.
+
+    Log files: ``<log_dir>/<name>_YYYYMMDD_HHMMSS.log``
+    """
+    log_dir = log_dir or LOG_DIR
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    logger = logging.getLogger(name)
+    if logger.handlers:
+        return logger
+    logger.setLevel(level)
+
+    # ── File handler: captures everything (DEBUG+) ──
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"{name}_{ts}.log"
+    file_fmt = logging.Formatter(
+        "%(asctime)s | %(levelname)-7s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    fh = logging.FileHandler(str(log_file), encoding="utf-8")
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(file_fmt)
+    logger.addHandler(fh)
+
+    # ── Console handler: only important stuff (WARNING+ default) ──
+    if rich_console and RICH_LOGGING_AVAILABLE:
+        ch = RichHandler(
+            level=console_level,
+            show_time=True,
+            show_path=False,
+            markup=True,
+            rich_tracebacks=True,
+            tracebacks_show_locals=True,
+        )
+    else:
+        ch = logging.StreamHandler(sys.stderr)
+        ch.setFormatter(logging.Formatter(
+            "%(asctime)s | %(levelname)-7s | %(message)s", datefmt="%H:%M:%S",
+        ))
+    ch.setLevel(console_level)
+    logger.addHandler(ch)
+
+    # Startup banner (file only)
+    logger.info("=" * 60)
+    logger.info("Logger initialized: %s", name)
+    logger.info("Log file: %s", log_file)
+    logger.info("Console level: %s", logging.getLevelName(console_level))
+    logger.info("=" * 60)
+
+    return logger
+
+
+log = setup_logging()
 
 # ═══════════════════════════════════════════════════════════════════════
 # CONSTANTS
@@ -614,7 +691,8 @@ class BankedFlash:
 
     def erase_sector(self, bank_byte: int, sector_addr_byte: int) -> bool:
         """
-        Erase a sector using OSE-style (bank, sector_addr) tuple.
+        Erase a sector using (bank, sector_addr) tuple format
+        matching kingai_commie_flasher.py ERASE_MAP.
         Returns True on success.
         """
         key = (bank_byte, sector_addr_byte)
@@ -635,7 +713,8 @@ class BankedFlash:
 
 def _self_test():
     """Run a standalone self-test of the flash simulator."""
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    # Use setup_logging with console output at INFO for self-test visibility
+    test_log = setup_logging(name="vecu.flash.selftest", console_level=logging.INFO)
 
     print("=== AMD Am29F010 Virtual Flash -- Self-Test ===\n")
 

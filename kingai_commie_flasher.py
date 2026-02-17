@@ -4,26 +4,37 @@ kingai_commie_flasher.py — VY V6 In-Car Flash Tool
 =====================================================
 
 by Jason King (pcmhacking.net: kingaustraliagg)
+
 Founder — KingAi Pty Ltd
+
 https://github.com/KingAiCodeForge
 
-Was this hard to do, no, to understand and remember everything, 
-and make the flasher and 
-the c compiler assembler 
-and virtual pcm and eeprom 
+Was this hard to do? No.
+To understand and remember everything,
+and make the flasher and
+the C compiler assembler
+and virtual PCM and EEPROM, right opcodes to make Python tools —
+extremely.
+To make it function, not impossible, but would require months or years, usually multiple people.
+The thing is, no one looks at the code, not many people understand python 
+otherwise this would of been done already.
+How does a human know what's AI script compared to human written?
+Near impossible to distinguish unless someone uses a specific formatting in comments and headers.
+They look at how well it functions.
 
 
-## overview of the github and this script and how it relates to my other projects.
-# python has better logging and faster dev time, easier to debug and test, isnt C
-# so its sloppy and slower code on silicon. cant knock python, 
-# this is the first aldl flash tool i have seen for vy v6 l36, 
-if you want to use any of my scripts and refactor and change addresses do so. 
-all could be edited a few address and names 
-and alot would work for older vn vp vr vs vt vx vy ecus 
-the dissasembly python scripts on my github across 3 vy v6 projects.
-c compiler and all stuff in there could be made into a other model by changing some addresses and names.
-not the flash tool,
-but the other scripts in each github.
+
+## Overview of the GitHub and this script and how it relates to my other projects.
+# Python has better logging and faster dev time, easier to debug and test, isn't C
+# so it's sloppy and slower code on silicon. Can't knock Python,
+# this is the first ALDL flash tool I have seen for VY V6 L36.
+If you want to use any of my scripts and refactor and change addresses, do so.
+All could be edited — a few addresses and names
+and a lot would work for older VN VP VR VS VT VX VY ECUs.
+The disassembly Python scripts on my GitHub across 3 VY V6 projects,
+C compiler and all stuff in there could be made into another model by changing some addresses and names.
+Not the flash tool,
+but the other scripts in each GitHub.
 
 The first open-source flash tool for 68HC11 Delco ECUs.
 No other tool — in any language, on any platform — has ever done this publicly.
@@ -1152,6 +1163,9 @@ class LoopbackTransport(BaseTransport):
 
     def open(self) -> None:
         self._opened = True
+        # Pre-seed a heartbeat byte so detect_heartbeat() succeeds immediately
+        # On a real bus the ECU broadcasts its device_id periodically — simulate that
+        self._rx_buffer.extend(bytes([DeviceID.VX_VY_F7]))
         label = f"Virtual ECU ({Path(self._bin_path).name})" if self._vecu_mode else "Loopback"
         log.info("%s transport opened (simulation mode)", label)
 
@@ -1255,6 +1269,44 @@ class LoopbackTransport(BaseTransport):
             # Response: [device_id, 0x55 + block_size + 1, mode, ...data..., checksum]
             resp = bytearray([device_id, 0x55 + len(block) + 1, ALDLMode.MODE2_READ_RAM])
             resp.extend(block)
+            cs = (256 - sum(resp) % 256) & 0xFF
+            resp.append(cs)
+            self._rx_buffer.extend(resp)
+
+        elif mode == ALDLMode.MODE9_UNSILENCE:
+            # ACK unsilence — same frame format as silence ACK
+            resp = bytearray([device_id, 0x56, ALDLMode.MODE9_UNSILENCE])
+            cs = (256 - sum(resp) % 256) & 0xFF
+            resp.append(cs)
+            self._rx_buffer.extend(resp)
+
+        elif mode == ALDLMode.MODE3_READ_BYTES:
+            # Read N bytes from an address — similar to Mode 2 but variable length
+            if len(data) >= 6:
+                address = (data[3] << 8) | data[4]
+                count = data[5] if data[5] > 0 else 1
+            else:
+                address = 0
+                count = 1
+            if address + count > len(self._simulated_bin):
+                count = max(0, len(self._simulated_bin) - address)
+            block = self._simulated_bin[address:address + count]
+            resp = bytearray([device_id, 0x55 + len(block) + 1, ALDLMode.MODE3_READ_BYTES])
+            resp.extend(block)
+            cs = (256 - sum(resp) % 256) & 0xFF
+            resp.append(cs)
+            self._rx_buffer.extend(resp)
+
+        elif mode == ALDLMode.MODE4_ACTUATOR:
+            # ACK actuator test command
+            resp = bytearray([device_id, 0x57, ALDLMode.MODE4_ACTUATOR, 0xAA])
+            cs = (256 - sum(resp) % 256) & 0xFF
+            resp.append(cs)
+            self._rx_buffer.extend(resp)
+
+        elif mode == ALDLMode.MODE10_WRITE_CAL:
+            # ACK cal write (live tune RAM shadow write)
+            resp = bytearray([device_id, 0x57, ALDLMode.MODE10_WRITE_CAL, 0xAA])
             cs = (256 - sum(resp) % 256) & 0xFF
             resp.append(cs)
             self._rx_buffer.extend(resp)
