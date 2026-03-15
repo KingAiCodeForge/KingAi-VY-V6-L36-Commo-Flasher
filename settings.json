@@ -1,0 +1,36 @@
+{
+  "comm": {
+    "device_id": 247,
+    "baud": 8192,
+    "timeout_ms": 2200,
+    "inter_frame_delay_ms": 10,
+    "max_retries": 10,
+    "write_chunk_size": 32,
+    "high_speed_read": false,
+    "ignore_echo": true,
+    "echo_byte_count": 0,
+    "bcm_device_id": 8,
+    "disable_bcm_chatter": false,
+    "auto_checksum_fix": true
+  },
+  "logging": {
+    "log_tx_frames": true,
+    "log_rx_frames": true,
+    "log_echo_bytes": true,
+    "log_state_changes": true,
+    "log_security": true,
+    "log_kernel_upload": true,
+    "log_erase_sectors": true,
+    "log_write_chunks": true,
+    "log_verify": true,
+    "log_flash_info": true,
+    "log_chatter": true,
+    "log_progress": true,
+    "log_retries": true,
+    "log_timeouts": true,
+    "log_checksum_errors": true,
+    "log_session_summary": true,
+    "log_click_events": true,
+    "log_timestamps": true
+  }
+}

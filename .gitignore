@@ -40,3 +40,11 @@ dist/
 build/
 *.egg-info/
 *.egg
+
+# Local test/debug scripts with machine-specific paths
+tests/_batch_export_all_bins.py
+tests/_cli_integration_test.py
+tests/_diff_exports.py
+
+# Empty archive dirs
+older_versions/

@@ -6,17 +6,20 @@ menu actions, toolbar buttons, options tab, and flash checkboxes.
 
 Tests every GUI class and action in kingai_commie_flasher.py Section 12:
 
-  LogWidget          — append_log, level colouring
-  SensorGaugeWidget  — value update, clamping
-  DashboardWidget    — update_data routing
-  TableEditorWidget  — load_table, cell edit, highlight
-  DisassemblerWidget — UI build, clear
-  OptionsWidget      — load/apply/reset, scrollbar
-  FlashWorker        — setup_read, setup_write
-  MainWindow         — build_ui, menu bar, connect_signals,
-                       flash checkbox toggles, state updates,
-                       load/save bin, refresh ports, options tab,
-                       about dialog, close event
+  LogWidget               — append_log, level colouring
+  SensorGaugeWidget       — value update, clamping
+  DashboardWidget         — update_data routing
+  TableEditorWidget       — load_table, cell edit, highlight
+  DisassemblerWidget      — UI build, clear
+  OptionsWidget           — load/apply/reset, scrollbar
+  FlashWorker             — setup_read, setup_write, setup_custom_*, setup_chaos
+  CustomFlashWidget       — sector table, address inputs, signals
+  ChaosTestWidget         — cycle config, start/stop, results
+  TransportSettingsWidget — PySerial/D2XX settings, presets, timing offsets
+  MainWindow              — build_ui (8 tabs), menu bar, connect_signals,
+                            flash checkbox toggles, state updates,
+                            load/save bin, refresh ports, options tab,
+                            new tab handlers, about dialog, close event
 
 Run:
     cd A:\\kingai_commie_flasher
@@ -387,7 +390,7 @@ class TestMainWindowStructure:
 
     def test_has_tabs(self, main_window):
         assert hasattr(main_window, 'tabs')
-        assert main_window.tabs.count() == 5  # Dashboard, Table Editor, Disassembler, Log, Options
+        assert main_window.tabs.count() == 8  # Dashboard, Table Editor, Disassembler, Log, Options, Custom Flash, Chaos Test, Transport
 
     def test_tab_names(self, main_window):
         names = [main_window.tabs.tabText(i) for i in range(main_window.tabs.count())]
@@ -396,6 +399,9 @@ class TestMainWindowStructure:
         assert "Disassembler" in names
         assert "Log" in names
         assert "Options" in names
+        assert "Custom Flash" in names
+        assert "Chaos Test" in names
+        assert "Transport" in names
 
     def test_has_port_combo(self, main_window):
         assert hasattr(main_window, 'port_combo')
@@ -658,6 +664,12 @@ class TestMainWindowActions:
         assert main_window.tabs.currentIndex() == 3
         main_window.action_view_options.trigger()
         assert main_window.tabs.currentIndex() == 4
+        main_window.action_view_custom_flash.trigger()
+        assert main_window.tabs.currentIndex() == 5
+        main_window.action_view_chaos.trigger()
+        assert main_window.tabs.currentIndex() == 6
+        main_window.action_view_transport.trigger()
+        assert main_window.tabs.currentIndex() == 7
 
     def test_refresh_ports(self, main_window):
         main_window._refresh_ports()
@@ -812,6 +824,320 @@ class TestCLINewArgs:
         parser = kcf.build_parser()
         args = parser.parse_args(["read", "--port", "COM3", "--high-speed"])
         assert args.high_speed is True
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# CUSTOM FLASH WIDGET
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestCustomFlashWidget:
+    """Tests for the CustomFlashWidget (sector-level brick recovery)."""
+
+    def test_instantiation(self):
+        w = kcf.CustomFlashWidget()
+        assert w is not None
+
+    def test_has_sector_input(self):
+        w = kcf.CustomFlashWidget()
+        assert hasattr(w, 'sector_input')
+        assert hasattr(w, 'sector_checks')
+        assert len(w.sector_checks) == 8  # 8 sectors in AMD 29F010
+
+    def test_has_address_inputs(self):
+        w = kcf.CustomFlashWidget()
+        assert hasattr(w, 'start_addr_input')
+        assert hasattr(w, 'end_addr_input')
+
+    def test_has_buttons(self):
+        w = kcf.CustomFlashWidget()
+        assert hasattr(w, 'btn_custom_write')
+        assert hasattr(w, 'btn_custom_read')
+        assert hasattr(w, 'btn_range_write')
+
+    def test_signals_exist(self):
+        w = kcf.CustomFlashWidget()
+        # Verify the signals are present (accessed as class attrs)
+        assert hasattr(kcf.CustomFlashWidget, 'start_custom_write')
+        assert hasattr(kcf.CustomFlashWidget, 'start_custom_read')
+
+    def test_sector_checkboxes_exist(self):
+        w = kcf.CustomFlashWidget()
+        assert hasattr(w, 'sector_checks')
+        assert len(w.sector_checks) == 8
+
+    def test_default_no_sectors_selected(self):
+        w = kcf.CustomFlashWidget()
+        for chk in w.sector_checks:
+            assert not chk.isChecked()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# CHAOS TEST WIDGET
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestChaosTestWidget:
+    """Tests for the ChaosTestWidget (stress-test loop)."""
+
+    def test_instantiation(self):
+        w = kcf.ChaosTestWidget()
+        assert w is not None
+
+    def test_has_cycle_spinner(self):
+        w = kcf.ChaosTestWidget()
+        assert hasattr(w, 'spin_cycles')
+        assert w.spin_cycles.value() == 0  # default = infinite
+
+    def test_has_mode_combo(self):
+        w = kcf.ChaosTestWidget()
+        assert hasattr(w, 'combo_write_mode')
+        # Should have BIN and CAL options
+        items = [w.combo_write_mode.itemText(i) for i in range(w.combo_write_mode.count())]
+        assert any("BIN" in item for item in items)
+        assert any("CAL" in item for item in items)
+
+    def test_has_delay_spinner(self):
+        w = kcf.ChaosTestWidget()
+        assert hasattr(w, 'spin_delay')
+
+    def test_has_stop_on_fail_checkbox(self):
+        w = kcf.ChaosTestWidget()
+        assert hasattr(w, 'chk_stop_on_fail')
+        assert w.chk_stop_on_fail.isChecked()  # default ON
+
+    def test_has_compare_checkbox(self):
+        w = kcf.ChaosTestWidget()
+        assert hasattr(w, 'chk_compare_bytes')
+        assert w.chk_compare_bytes.isChecked()  # default ON
+
+    def test_has_start_stop_buttons(self):
+        w = kcf.ChaosTestWidget()
+        assert hasattr(w, 'btn_start')
+        assert hasattr(w, 'btn_stop')
+        assert w.btn_start.isEnabled()
+        assert not w.btn_stop.isEnabled()  # stop disabled until started
+
+    def test_has_results_label(self):
+        w = kcf.ChaosTestWidget()
+        assert hasattr(w, 'results_label')
+
+    def test_update_results(self):
+        w = kcf.ChaosTestWidget()
+        w.update_results(5, 4, 1, "mismatch at $4000")
+        text = w.results_label.text()
+        assert "5" in text
+        assert "4" in text
+        assert "1" in text
+
+    def test_signals_exist(self):
+        assert hasattr(kcf.ChaosTestWidget, 'start_chaos')
+        assert hasattr(kcf.ChaosTestWidget, 'stop_chaos')
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# TRANSPORT SETTINGS WIDGET
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestTransportSettingsWidget:
+    """Tests for the TransportSettingsWidget (PySerial / D2XX tuning)."""
+
+    def test_instantiation(self):
+        config = kcf.CommConfig()
+        w = kcf.TransportSettingsWidget(config)
+        assert w is not None
+
+    def test_has_pyserial_read_timeout(self):
+        config = kcf.CommConfig()
+        w = kcf.TransportSettingsWidget(config)
+        assert hasattr(w, 'spin_py_read_timeout')
+        assert w.spin_py_read_timeout.value() == 100  # default
+
+    def test_has_pyserial_write_timeout(self):
+        config = kcf.CommConfig()
+        w = kcf.TransportSettingsWidget(config)
+        assert hasattr(w, 'spin_py_write_timeout')
+        assert w.spin_py_write_timeout.value() == 1000  # default
+
+    def test_has_flow_control_checkboxes(self):
+        config = kcf.CommConfig()
+        w = kcf.TransportSettingsWidget(config)
+        assert hasattr(w, 'chk_py_rtscts')
+        assert hasattr(w, 'chk_py_dsrdtr')
+        assert hasattr(w, 'chk_py_xonxoff')
+        # All OFF by default (ALDL doesn't use flow control)
+        assert not w.chk_py_rtscts.isChecked()
+        assert not w.chk_py_dsrdtr.isChecked()
+        assert not w.chk_py_xonxoff.isChecked()
+
+    def test_has_d2xx_latency_timer(self):
+        config = kcf.CommConfig()
+        w = kcf.TransportSettingsWidget(config)
+        assert hasattr(w, 'spin_d2xx_latency')
+        assert w.spin_d2xx_latency.value() == 2  # our recommended default
+
+    def test_has_d2xx_timeouts(self):
+        config = kcf.CommConfig()
+        w = kcf.TransportSettingsWidget(config)
+        assert hasattr(w, 'spin_d2xx_read_timeout')
+        assert hasattr(w, 'spin_d2xx_write_timeout')
+        assert w.spin_d2xx_read_timeout.value() == 200
+        assert w.spin_d2xx_write_timeout.value() == 200
+
+    def test_has_timing_offsets(self):
+        config = kcf.CommConfig()
+        w = kcf.TransportSettingsWidget(config)
+        assert hasattr(w, 'spin_silence_offset')
+        assert hasattr(w, 'spin_tx_delay_offset')
+        assert hasattr(w, 'spin_retry_delay_offset')
+        assert hasattr(w, 'spin_erase_timeout_offset')
+        assert hasattr(w, 'spin_cleanup_delay_offset')
+        # All 0 by default
+        assert w.spin_silence_offset.value() == 0
+        assert w.spin_tx_delay_offset.value() == 0
+        assert w.spin_retry_delay_offset.value() == 0
+        assert w.spin_erase_timeout_offset.value() == 0
+        assert w.spin_cleanup_delay_offset.value() == 0
+
+    def test_has_preset_combo(self):
+        config = kcf.CommConfig()
+        w = kcf.TransportSettingsWidget(config)
+        assert hasattr(w, 'combo_preset')
+        assert w.combo_preset.count() >= 5  # Custom + several presets
+
+    def test_has_apply_and_reset_buttons(self):
+        config = kcf.CommConfig()
+        w = kcf.TransportSettingsWidget(config)
+        assert hasattr(w, 'apply_btn')
+        assert hasattr(w, 'reset_btn')
+
+    def test_get_transport_settings_returns_dict(self):
+        config = kcf.CommConfig()
+        w = kcf.TransportSettingsWidget(config)
+        settings = w.get_transport_settings()
+        assert isinstance(settings, dict)
+        assert "pyserial" in settings
+        assert "d2xx" in settings
+        assert "timing_offsets" in settings
+        assert settings["d2xx"]["latency_timer_ms"] == 2
+        assert settings["pyserial"]["rtscts"] is False
+
+    def test_reset_restores_defaults(self):
+        config = kcf.CommConfig()
+        w = kcf.TransportSettingsWidget(config)
+        # Change a value
+        w.spin_d2xx_latency.setValue(16)
+        assert w.spin_d2xx_latency.value() == 16
+        # Reset
+        w._on_reset()
+        assert w.spin_d2xx_latency.value() == 2
+
+    def test_config_changed_signal(self):
+        config = kcf.CommConfig()
+        w = kcf.TransportSettingsWidget(config)
+        signal_received = []
+        w.config_changed.connect(lambda: signal_received.append(True))
+        w._on_apply()
+        assert len(signal_received) == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# FLASH WORKER — NEW SETUP METHODS
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestFlashWorkerNewMethods:
+    """Tests for FlashWorker custom_write, custom_read, chaos setup."""
+
+    def test_setup_custom_write(self, loopback_comm):
+        loopback_comm.connect()
+        data = bytearray(b'\xFF' * 131072)
+        w = kcf.FlashWorker(loopback_comm)
+        w.setup_custom_write(data, [0, 1, 2])
+        assert w._task == "custom_write"
+        assert w._sectors == [0, 1, 2]
+
+    def test_setup_custom_read(self, loopback_comm):
+        loopback_comm.connect()
+        w = kcf.FlashWorker(loopback_comm)
+        w.setup_custom_read(0x4000, 0x7FFF)
+        assert w._task == "custom_read"
+        assert w._custom_start == 0x4000
+        assert w._custom_end == 0x7FFF
+
+    def test_setup_chaos(self, loopback_comm):
+        loopback_comm.connect()
+        data = bytearray(b'\xFF' * 131072)
+        cfg = {"cycles": 3, "mode": "BIN", "delay": 1, "stop_on_fail": True, "compare_bytes": True}
+        w = kcf.FlashWorker(loopback_comm)
+        w.setup_chaos(cfg, data)
+        assert w._task == "chaos"
+        assert w._chaos_cfg["cycles"] == 3
+        assert w._bin_data is data
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# MAIN WINDOW — NEW TAB WIDGETS
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestMainWindowNewTabs:
+    """Tests that the new tabs are present and wired in MainWindow."""
+
+    def test_has_custom_flash_tab(self, main_window):
+        assert hasattr(main_window, 'custom_flash_tab')
+        assert isinstance(main_window.custom_flash_tab, kcf.CustomFlashWidget)
+
+    def test_has_chaos_tab(self, main_window):
+        assert hasattr(main_window, 'chaos_tab')
+        assert isinstance(main_window.chaos_tab, kcf.ChaosTestWidget)
+
+    def test_has_transport_tab(self, main_window):
+        assert hasattr(main_window, 'transport_tab')
+        assert isinstance(main_window.transport_tab, kcf.TransportSettingsWidget)
+
+    def test_custom_flash_tab_index(self, main_window):
+        assert main_window.tabs.tabText(5) == "Custom Flash"
+
+    def test_chaos_tab_index(self, main_window):
+        assert main_window.tabs.tabText(6) == "Chaos Test"
+
+    def test_transport_tab_index(self, main_window):
+        assert main_window.tabs.tabText(7) == "Transport"
+
+    def test_has_view_action_custom_flash(self, main_window):
+        assert hasattr(main_window, 'action_view_custom_flash')
+        assert main_window.action_view_custom_flash.shortcut().toString() == "Ctrl+6"
+
+    def test_has_view_action_chaos(self, main_window):
+        assert hasattr(main_window, 'action_view_chaos')
+        assert main_window.action_view_chaos.shortcut().toString() == "Ctrl+7"
+
+    def test_has_view_action_transport(self, main_window):
+        assert hasattr(main_window, 'action_view_transport')
+        assert main_window.action_view_transport.shortcut().toString() == "Ctrl+8"
+
+    def test_custom_flash_handler_exists(self, main_window):
+        assert hasattr(main_window, '_on_custom_write')
+        assert hasattr(main_window, '_on_custom_read')
+
+    def test_chaos_handlers_exist(self, main_window):
+        assert hasattr(main_window, '_on_start_chaos')
+        assert hasattr(main_window, '_on_stop_chaos')
+
+    def test_custom_flash_no_comm_warning(self, main_window):
+        """Calling custom write with no connection should not crash."""
+        with patch('kingai_commie_flasher.QMessageBox'):
+            main_window._on_custom_write([0, 1])
+
+    def test_chaos_no_comm_warning(self, main_window):
+        """Calling chaos test with no connection should not crash."""
+        with patch('kingai_commie_flasher.QMessageBox'):
+            main_window._on_start_chaos({"cycles": 1, "mode": "BIN"})
+
+    def test_flash_finished_resets_chaos_buttons(self, main_window):
+        """Verify _on_flash_finished resets chaos tab buttons."""
+        main_window.chaos_tab.btn_start.setEnabled(False)
+        main_window.chaos_tab.btn_stop.setEnabled(True)
+        main_window._on_flash_finished(True)
+        assert main_window.chaos_tab.btn_start.isEnabled()
+        assert not main_window.chaos_tab.btn_stop.isEnabled()
 
 
 if __name__ == "__main__":

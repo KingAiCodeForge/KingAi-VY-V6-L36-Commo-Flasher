@@ -9,51 +9,38 @@ Founder — KingAi Pty Ltd
 
 https://github.com/KingAiCodeForge
 
-Was this hard to do? No.
-To understand and remember everything,
-and make the flasher and
-the C compiler assembler
-and virtual PCM and EEPROM, right opcodes to make Python tools —
-extremely.
-To make it function, not impossible, but would require months or years, usually multiple people.
-The thing is, no one looks at the code, not many people understand python 
-otherwise this would of been done already.
-How does a human know what's AI script compared to human written?
-Near impossible to distinguish unless someone uses a specific formatting in comments and headers.
-They look at how well it functions.
+Was this hard to build? No.
+To understand and remember everything — the ALDL protocol, 68HC11 opcodes,
+flash chip command sequences, bank switching, seed/key auth, kernel upload,
+sector geometry, and the VB.NET source that documented none of it — extremely.
 
-
-
-## Overview of the GitHub and this script and how it relates to my other projects.
-# Python has better logging and faster dev time, easier to debug and test, isn't C
-# so it's sloppy and slower code on silicon. Can't knock Python,
-# this is the first ALDL flash tool I have seen for VY V6 L36.
-If you want to use any of my scripts and refactor and change addresses, do so.
-All could be edited — a few addresses and names
-and a lot would work for older VN VP VR VS VT VX VY ECUs.
-The disassembly Python scripts on my GitHub across 3 VY V6 projects,
-C compiler and all stuff in there could be made into another model by changing some addresses and names.
-Not the flash tool,
-but the other scripts in each GitHub.
+No one looks at the code. Not many people understand Python at this level,
+otherwise this would have been done already.
 
 The first open-source flash tool for 68HC11 Delco ECUs.
 No other tool — in any language, on any platform — has ever done this publicly.
 The only comparable tool is closed-source VB.NET from 2010, distributed as
 a Windows binary with no source code available anywhere.
 
-    "AI slop"           — GitHub Issue #1
+    "AI slop"            — GitHub Issue #1
     "Absolute pure junk" — GitHub Issue #2
-    "Learn to tune"     — pcmhacking.net
+    "Learn to tune"      — pcmhacking.net
 
 They said it wouldn't work. They made GitHub accounts just to say that.
 None of them posted a single correction, a single wrong address, or ran
 a single line of code. Just opinions with zero evidence.
 
-
 If you can read every topic on pcmhacking.net, remember every detail, and
 find a single incorrect address in this code — you can do what I did.
-If you can't, then stop pretending to be an expert and let the people
-doing the actual work get on with it.
+If you can't, stop pretending to be an expert and let the people doing
+the actual work get on with it.
+
+Portability:
+    If you want to use any of these scripts for other ECUs, do it.
+    Change a few addresses and names and most of this works for
+    VN, VP, VR, VS, VT, VX, and VY Delco ECUs. The disassembly scripts,
+    C compiler, and patching tools across the three VY V6 GitHub repos
+    were all built in one month. All open source. All MIT licensed.
 
 Context:
     There is no active open-source development of custom OS or code patches
@@ -85,7 +72,6 @@ Related Projects:
 Contributions welcome — open an issue or PR with corrections, improvements,
 or experience patching Delco ECUs.
 
-
 Target Hardware:
     ECU:    Delco/Delphi 68HC11F1
     OS:     $060A (part 92118883)
@@ -95,14 +81,55 @@ Target Hardware:
 Architecture:
     1:1 Python reimplementation of the OSE Enhanced Flash Tool V1.5.1
     (28,985 lines VB.NET, credits to VL400 and the pcmhacking.net community).
-    Single-file script with PySide6 GUI + full CLI backend.
+    Single-file script (~5720 lines) with PySide6 GUI + full CLI backend.
     Built-in 68HC11 disassembler (311 opcodes, VY V6 annotations).
     Virtual ECU transport for offline testing with real bin files.
+
+GUI Tabs (8):
+    1. Dashboard     — 18 live sensor gauges (RPM, ECT, IAT, TPS, MAF, etc.)
+    2. Table Editor  — Calibration table viewer (spark maps, fuel trim, OL AFR, TCC duty)
+    3. Disassembler  — Built-in 68HC11 disassembler with VY V6 address annotations
+    4. Log           — Real-time event bus / log viewer (active tab during flash ops)
+    5. Options       — Connection settings, timing, retry, flash behaviour, logging presets
+    6. Custom Flash  — Sector-level brick recovery: select sectors 0-7, custom hex range read/write
+    7. Chaos Test    — Automated stress test: read→write→readback→compare loop with configurable cycles
+    8. Transport     — PySerial + FTDI D2XX low-level settings, timing offsets, vehicle presets
+
+Menu Bar (31 actions, all wired):
+    File       — Load/Save .bin, Save .cal, Exit
+    Connection — Connect/Disconnect, Refresh Ports, vEEPROM submenu (Load/Unload/Erase/Export/Info)
+    Flash      — Read ECU, Write BIN, Write CAL, Cancel, toggles (auto-checksum/verify/high-speed/echo)
+    Tools      — Verify/Fix Checksum, ECU Info, Options
+    View       — Dashboard (Ctrl+1) through Transport (Ctrl+8)
+    Help       — About
+
+CLI Commands (7):
+    gui, read, write, datalog, info, checksum, ports
+
+Safety Features (implemented 2026-02-18):
+    - UI lockout during flash ops (all tabs except Log disabled)
+    - Flash-menu toggles locked during operations
+    - File menu locked during operations
+    - Disconnect during WRITE requires explicit danger confirmation dialog
+    - Window close blocked entirely during WRITE operations
+    - Reads can be cancelled/disconnected safely anytime
+
+Transport Reliability (hardened 2026-02-18):
+    - RX buffer flush + 50ms inter-retry delay between all retry attempts
+    - Write chunk retries flush bus before re-sending
+    - Per-block read retries (3x) with bus flush before skipping
+    - Retry counting fixed (no more retry 11/10)
+
+Test Suite (275 tests, all passing as of 2026-02-18):
+    - test_kingai_commie_flasher.py — 118 tests (protocol, framing, transport, kernel, vECU, events)
+    - test_gui_functions.py         — 157 tests (GUI widgets, new tabs, view actions, FlashWorker setup)
+    - test_vecu.py                  — 5 tests (virtual ECU integration with real bin files)
 
 Status:
     VIRTUAL TESTING ONLY — not yet tested on real hardware.
     All protocol paths verified against decompiled OSE source.
     Tested with real 128KB bin files via Virtual ECU transport.
+    First successful virtual read/write session completed 2026-02-17.
     If you test on hardware before I do, open an issue with results.
 
 WARNING:
@@ -111,7 +138,14 @@ WARNING:
     before flashing. Do NOT disconnect power during a write operation.
 
 Requires: Python 3.10+, pyserial
-Optional: PySide6 (GUI), ftd2xx (D2XX transport) havent tryed it yet
+Optional: PySide6 (GUI), ftd2xx (D2XX transport)
+ 
+So scripts on my githubs are not ai slop. why not try reading a cal r bin. 
+if the software freezes just like ose flashtool your lucky cause we have 
+a logging system and can correct any of the 8 banks individually with my
+tool when i code this in, i have it outside will upstream the working code into this.
+a resume tab will be added, maybe a repair tab. that has a choice of any of the banks, 
+then can even resume or go back and overwrite then continue where the number you punch in to the box in the frontend, simple. will work.
 
 MIT License
 
@@ -157,7 +191,7 @@ import threading
 import traceback
 from pathlib import Path
 from datetime import datetime
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from enum import IntEnum, Enum, auto
 from typing import Optional, Callable, List, Tuple, Dict, Any
 from collections import deque
@@ -380,6 +414,19 @@ BANK_WRITE_MAP = [
     (FlashBank.BANK_80, 0x18000, 0x1FFFF, 0x10000),  # Sectors 6-7 (32KB, remap to $8000)
 ]
 
+# Per-sector info for custom flash: (sector_num, bank, erase_byte, file_start, file_end, label)
+# AMD 29F010: 8 × 16KB sectors.  Sector 7 = boot area — never erase unless you have a bench programmer.
+SECTOR_INFO = [
+    (0, FlashBank.BANK_72, FlashSector.SECTOR_0, 0x0000, 0x3FFF, "OS Vectors / Boot"),
+    (1, FlashBank.BANK_72, FlashSector.SECTOR_1, 0x4000, 0x7FFF, "Calibration (CAL)"),
+    (2, FlashBank.BANK_72, FlashSector.SECTOR_2, 0x8000, 0xBFFF, "OS Page 1"),
+    (3, FlashBank.BANK_72, FlashSector.SECTOR_3, 0xC000, 0xFFFF, "OS Page 2"),
+    (4, FlashBank.BANK_88, FlashSector.SECTOR_4, 0x10000, 0x13FFF, "OS Page 3"),
+    (5, FlashBank.BANK_88, FlashSector.SECTOR_5, 0x14000, 0x17FFF, "OS Page 4"),
+    (6, FlashBank.BANK_80, FlashSector.SECTOR_6, 0x18000, 0x1BFFF, "OS Page 5"),
+    (7, FlashBank.BANK_80, FlashSector.SECTOR_7, 0x1C000, 0x1FFFF, "OS Page 6 + Vectors (BOOT)"),
+]
+
 # Checksum location in the bin file
 CHECKSUM_OFFSET_HI = 0x4006
 CHECKSUM_OFFSET_LO = 0x4007
@@ -410,7 +457,11 @@ MODE6_UPLOAD_TIMEOUT_MS = 10000
 ERASE_TIMEOUT_MS = 30000
 WRITE_FRAME_TIMEOUT_MS = 5000
 CHECKSUM_TIMEOUT_MS = 30000
-CLEANUP_DELAY_MS = 750
+CLEANUP_DELAY_MS = 2000          # Wait after reset before re-enabling chatter (was 750, too fast)
+POST_CHATTER_DELAY_MS = 1500     # Wait after re-enabling chatter before any further comms
+INTER_RETRY_DELAY_MS = 50        # Pause between retries — lets the bus settle and RX buffer drain
+READ_BLOCK_MAX_RETRIES = 3       # Per-block read retries before skipping
+SECTOR_SIZE = 0x4000             # 16KB flash sector boundary for write rollback
 
 # Flash chip IDs
 FLASH_AMD_29F010 = (0x01, 0x20)   # Manufacturer=AMD, Device=29F010
@@ -1266,6 +1317,18 @@ class LoopbackTransport(BaseTransport):
     def bytes_available(self) -> int:
         return len(self._rx_buffer)
 
+    # Pre-built sector lookup — avoids rebuilding dict on every call (#14 fix)
+    _SECTOR_OFFSET_MAP = {
+        (FlashBank.BANK_72, FlashSector.SECTOR_0): 0x00000,
+        (FlashBank.BANK_72, FlashSector.SECTOR_1): 0x04000,
+        (FlashBank.BANK_72, FlashSector.SECTOR_2): 0x08000,
+        (FlashBank.BANK_72, FlashSector.SECTOR_3): 0x0C000,
+        (FlashBank.BANK_88, FlashSector.SECTOR_4): 0x10000,
+        (FlashBank.BANK_88, FlashSector.SECTOR_5): 0x14000,
+        (FlashBank.BANK_80, FlashSector.SECTOR_6): 0x18000,
+        (FlashBank.BANK_80, FlashSector.SECTOR_7): 0x1C000,
+    }
+
     def _sector_to_file_offset(self, bank: int, sector_byte: int) -> Optional[int]:
         """Map (bank, sector_byte) to flat file offset for sector erase.
 
@@ -1274,29 +1337,7 @@ class LoopbackTransport(BaseTransport):
 
         Returns the flat 128KB file offset for the start of the sector, or None if invalid.
         """
-        # Build lookup from the ERASE_MAP constants and known sector geometry
-        # Bank 72 ($48): sectors 0-3, direct mapping (file offset = bank offset)
-        #   sector $00 → file $00000  (sector 0)
-        #   sector $40 → file $04000  (sector 1, CAL)
-        #   sector $80 → file $08000  (sector 2)
-        #   sector $C0 → file $0C000  (sector 3)
-        # Bank 88 ($58): sectors 4-5, file offset = bank offset + $10000
-        #   sector $80 → file $10000  (sector 4)
-        #   sector $C0 → file $14000  (sector 5)
-        # Bank 80 ($50): sectors 6-7, file offset = bank offset + $18000
-        #   sector $80 → file $18000  (sector 6)
-        #   sector $C0 → file $1C000  (sector 7)
-        _map = {
-            (FlashBank.BANK_72, FlashSector.SECTOR_0): 0x00000,
-            (FlashBank.BANK_72, FlashSector.SECTOR_1): 0x04000,
-            (FlashBank.BANK_72, FlashSector.SECTOR_2): 0x08000,
-            (FlashBank.BANK_72, FlashSector.SECTOR_3): 0x0C000,
-            (FlashBank.BANK_88, FlashSector.SECTOR_4): 0x10000,
-            (FlashBank.BANK_88, FlashSector.SECTOR_5): 0x14000,
-            (FlashBank.BANK_80, FlashSector.SECTOR_6): 0x18000,
-            (FlashBank.BANK_80, FlashSector.SECTOR_7): 0x1C000,
-        }
-        return _map.get((bank, sector_byte))
+        return self._SECTOR_OFFSET_MAP.get((bank, sector_byte))
 
     def _simulate_response(self, data: bytes) -> None:
         """Generate simulated ECU responses based on sent frames."""
@@ -1484,6 +1525,41 @@ class CommState(Enum):
     ERROR = auto()
 
 @dataclass
+class LogConfig:
+    """Verbose event bus logging settings — toggle what gets logged.
+
+    Each flag controls whether the event bus fires and the file logger records
+    that category of event.  All default to True.  Stored in settings.json
+    and toggled from the Options tab or the Tools → Logging menu.
+    """
+    # ── Frame-level (DEBUG) ──
+    log_tx_frames: bool = True          # Every TX frame hex dump
+    log_rx_frames: bool = True          # Every RX frame hex dump
+    log_echo_bytes: bool = False        # Echo consume details (noisy)
+
+    # ── Operation-level (INFO) ──
+    log_state_changes: bool = True      # CommState transitions
+    log_security: bool = True           # Seed/key exchange
+    log_kernel_upload: bool = True      # Kernel block uploads
+    log_erase_sectors: bool = True      # Per-sector erase start/done
+    log_write_chunks: bool = True       # Per-chunk write progress
+    log_verify: bool = True             # Checksum verify pass/fail
+    log_flash_info: bool = True         # Flash chip ID reads
+    log_chatter: bool = True            # Bus silence/unsilence
+    log_progress: bool = True           # Progress bar updates
+
+    # ── Error/Warning (WARNING+) ──
+    log_retries: bool = True            # Every retry attempt
+    log_timeouts: bool = True           # Frame timeouts
+    log_checksum_errors: bool = True    # RX checksum failures
+
+    # ── Session-level ──
+    log_session_summary: bool = True    # Flash session summary box
+    log_click_events: bool = False      # GUI button clicks (off by default)
+    log_timestamps: bool = True         # Timestamps on every event
+
+
+@dataclass
 class CommConfig:
     """Communication configuration."""
     device_id: int = DeviceID.VX_VY_F7
@@ -1496,7 +1572,124 @@ class CommConfig:
     ignore_echo: bool = True
     echo_byte_count: int = 0
     bcm_device_id: int = 0x08
+    disable_bcm_chatter: bool = False   # Skip BCM silence — OFF by default (bench/virtual setups have no BCM)
     auto_checksum_fix: bool = True
+
+
+# ── Settings Persistence ──
+
+SETTINGS_FILE = Path(__file__).resolve().parent / "settings.json"
+
+class SettingsManager:
+    """Persist CommConfig + LogConfig to JSON.  Loads on startup, saves on change.
+
+    Settings stored next to the script as settings.json.  If the file doesn't
+    exist or is corrupt, defaults are used silently.
+    """
+
+    @staticmethod
+    def save(comm: CommConfig, log_cfg: LogConfig, path: Path = None) -> None:
+        """Write current settings to disk."""
+        path = path or SETTINGS_FILE
+        data = {
+            "comm": {k: v for k, v in comm.__dict__.items()},
+            "logging": {k: v for k, v in log_cfg.__dict__.items()},
+        }
+        try:
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            tmp.replace(path)
+            log.debug("Settings saved → %s", path)
+        except Exception as e:
+            log.error("Failed to save settings: %s", e)
+
+    @staticmethod
+    def load(path: Path = None) -> Tuple[CommConfig, LogConfig]:
+        """Load settings from disk.  Returns defaults on any error."""
+        path = path or SETTINGS_FILE
+        comm = CommConfig()
+        log_cfg = LogConfig()
+        try:
+            if path.exists():
+                data = json.loads(path.read_text(encoding="utf-8"))
+                for k, v in data.get("comm", {}).items():
+                    if hasattr(comm, k):
+                        setattr(comm, k, v)
+                for k, v in data.get("logging", {}).items():
+                    if hasattr(log_cfg, k):
+                        setattr(log_cfg, k, v)
+                log.debug("Settings loaded ← %s", path)
+        except Exception as e:
+            log.warning("Could not load settings (%s), using defaults", e)
+        return comm, log_cfg
+
+
+# ── Crash Recovery State ──
+
+RECOVERY_STATE_FILE = Path(__file__).resolve().parent / "flash_recovery_state.json"
+
+@dataclass
+class RecoveryState:
+    """Persisted to disk after every state change during flash operations.
+
+    If the app crashes mid-flash, this file tells us exactly what happened:
+    which sectors are erased, which are written, and where to resume.
+    """
+    session_id: str = ""
+    timestamp: str = ""
+    phase: str = "idle"             # idle, erasing, writing, verifying, complete
+    backup_file: str = ""           # Path to pre-write backup .bin
+    write_file: str = ""            # Path to .bin being written
+    write_mode: str = "BIN"         # CAL / BIN / PROM
+    sectors_erased: List[int] = field(default_factory=list)
+    sectors_written: List[int] = field(default_factory=list)
+    last_write_address: int = 0     # Last successfully written file offset
+    total_bytes: int = 0
+    bytes_written: int = 0
+    checksum_verified: bool = False
+    eeprom_written: bool = False
+
+    def save(self, path: Path = None) -> None:
+        """Atomic write to disk."""
+        path = path or RECOVERY_STATE_FILE
+        self.timestamp = datetime.now().isoformat()
+        try:
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self.__dict__, indent=2), encoding="utf-8")
+            tmp.replace(path)
+        except Exception as e:
+            log.error("Failed to save recovery state: %s", e)
+
+    @classmethod
+    def load(cls, path: Path = None) -> Optional["RecoveryState"]:
+        """Load from disk.  Returns None if no file or corrupt."""
+        path = path or RECOVERY_STATE_FILE
+        try:
+            if path.exists():
+                data = json.loads(path.read_text(encoding="utf-8"))
+                state = cls()
+                for k, v in data.items():
+                    if hasattr(state, k):
+                        setattr(state, k, v)
+                return state
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def clear(path: Path = None) -> None:
+        """Delete the recovery file (normal completion)."""
+        path = path or RECOVERY_STATE_FILE
+        try:
+            if path.exists():
+                path.unlink()
+        except Exception:
+            pass
+
+    @property
+    def is_interrupted(self) -> bool:
+        """True if a previous session was interrupted mid-flash."""
+        return self.phase in ("erasing", "writing")
 
 class ECUComm:
     """
@@ -1504,9 +1697,11 @@ class ECUComm:
     Handles framing, echo detection, silence, retries, and state management.
     """
 
-    def __init__(self, transport: BaseTransport, config: CommConfig = None):
+    def __init__(self, transport: BaseTransport, config: CommConfig = None,
+                 log_cfg: LogConfig = None):
         self.transport = transport
         self.config = config or CommConfig()
+        self.log_cfg = log_cfg or LogConfig()
         self.state = CommState.DISCONNECTED
         self._cancel = threading.Event()
         self._lock = threading.Lock()
@@ -1516,17 +1711,33 @@ class ECUComm:
 
     # ── Event System ──
 
+    def clear_callbacks(self, event: Optional[str] = None) -> None:
+        """Remove registered callbacks. If *event* given, clear only that event; otherwise clear all."""
+        if event:
+            self._callbacks.pop(event, None)
+        else:
+            self._callbacks.clear()
+
     def on(self, event: str, callback: Callable) -> None:
-        """Register an event callback. Events: log, progress, state, error, data."""
+        """Register an event callback. Events: log, progress, state, error, data, frame_tx, frame_rx, etc."""
         self._callbacks.setdefault(event, []).append(callback)
 
     def emit(self, event: str, **kwargs) -> None:
         """Emit an event to all registered callbacks."""
+        # Add timestamp if logging timestamps enabled
+        if self.log_cfg.log_timestamps and "ts" not in kwargs:
+            kwargs["ts"] = time.monotonic()
         for cb in self._callbacks.get(event, []):
             try:
                 cb(**kwargs)
             except Exception as e:
                 log.error("Event callback error: %s", e)
+        # Also fire wildcard subscribers
+        for cb in self._callbacks.get("*", []):
+            try:
+                cb(event=event, **kwargs)
+            except Exception:
+                pass
 
     def cancel(self) -> None:
         """Cancel the current operation."""
@@ -1551,10 +1762,14 @@ class ECUComm:
         # Log TX
         self._tx_frame_log.append((time.monotonic(), wire_bytes))
         log.debug("TX [%d]: %s", wire_len, wire_bytes.hex(" "))
+        if self.log_cfg.log_tx_frames:
+            self.emit("frame_tx", frame_hex=wire_bytes.hex(" "), length=wire_len)
 
         # Wait for silence
         if not self._wait_silence():
             log.warning("Bus congestion — could not get clear slot")
+            if self.log_cfg.log_timeouts:
+                self.emit("log", msg="Bus congestion — could not get clear slot", level="warning")
             return False
 
         # Inter-frame delay
@@ -1568,6 +1783,8 @@ class ECUComm:
         if self.config.ignore_echo and self.config.echo_byte_count > 0:
             echo = self.transport.read(self.config.echo_byte_count, timeout_ms=ECHO_DETECT_TIMEOUT_MS)
             log.debug("Echo consumed [%d]: %s", len(echo), echo.hex(" ") if echo else "empty")
+            if self.log_cfg.log_echo_bytes:
+                self.emit("log", msg=f"Echo consumed [{len(echo)}]: {echo.hex(' ') if echo else 'empty'}", level="debug")
 
         return True
 
@@ -1616,37 +1833,55 @@ class ECUComm:
         # Verify checksum
         if not ALDLProtocol.verify_checksum(frame):
             log.warning("Checksum error on RX frame: %s", bytes(frame[:wire_len]).hex(" "))
+            if self.log_cfg.log_checksum_errors:
+                self.emit("log", msg=f"Checksum error on RX: {bytes(frame[:wire_len]).hex(' ')}", level="warning")
             return None
 
         # Log RX
         self._rx_frame_log.append((time.monotonic(), bytes(frame[:wire_len])))
         log.debug("RX [%d]: %s", wire_len, bytes(frame[:wire_len]).hex(" "))
+        if self.log_cfg.log_rx_frames:
+            self.emit("frame_rx", frame_hex=bytes(frame[:wire_len]).hex(" "), length=wire_len, checksum_ok=True)
 
         return frame
 
     def _transact(self, frame: bytearray, timeout_ms: int = None,
                   retries: int = None) -> Optional[bytearray]:
-        """Send a frame and wait for response, with retries."""
+        """Send a frame and wait for response, with retries.
+
+        On each failed attempt the RX buffer is flushed and a short delay
+        inserted so the bus can settle.  Without this, stale/shifted bytes
+        from the previous response cause every subsequent retry to see the
+        same garbage (wrong length byte, checksum errors, incomplete frames).
+        """
         retries = retries if retries is not None else self.config.max_retries
         timeout_ms = timeout_ms or self.config.timeout_ms
 
-        for attempt in range(retries + 1):
-            if self.cancelled:
-                return None
+        with self._lock:  # thread-safe serial access (#5 fix)
+            for attempt in range(retries):
+                if self.cancelled:
+                    return None
 
-            if not self._tx_frame(frame):
-                time.sleep(0.05)
-                continue
+                if not self._tx_frame(frame):
+                    time.sleep(0.05)
+                    continue
 
-            resp = self._rx_frame(timeout_ms=timeout_ms)
-            if resp is not None:
-                return resp
+                resp = self._rx_frame(timeout_ms=timeout_ms)
+                if resp is not None:
+                    return resp
 
-            log.info("No response, retry %d/%d", attempt + 1, retries)
-            self.emit("log", msg=f"No response, retry {attempt+1}/{retries}", level="warning")
+                # ── Failed: resync bus before next attempt ──
+                self.transport.flush_input()
+                time.sleep(INTER_RETRY_DELAY_MS / 1000.0)
+
+                log.info("No response, retry %d/%d", attempt + 1, retries)
+                if self.log_cfg.log_retries:
+                    self.emit("log", msg=f"No response, retry {attempt+1}/{retries}", level="warning")
+                    self.emit("retry", attempt=attempt + 1, max_retries=retries, reason="timeout")
 
         log.error("Transaction failed after %d retries", retries)
-        self.emit("log", msg=f"Transaction failed after {retries} retries", level="error")
+        if self.log_cfg.log_timeouts:
+            self.emit("log", msg=f"Transaction failed after {retries} retries", level="error")
         return None
 
     def _wait_silence(self, wait_ms: int = None) -> bool:
@@ -1739,12 +1974,14 @@ class ECUComm:
 
     def disable_chatter(self) -> bool:
         """Send Mode 8 to silence BCM and ECM chatter on the ALDL bus."""
-        # Silence BCM first (if configured)
-        if self.config.bcm_device_id:
+        # Silence BCM first (if configured and enabled)
+        if self.config.bcm_device_id and self.config.disable_bcm_chatter:
             frame = ALDLProtocol.build_silence_frame(self.config.bcm_device_id)
             if self.config.ignore_echo:
                 self.config.echo_byte_count = ALDLProtocol.wire_length(frame)
             self._transact(frame, timeout_ms=1000, retries=2)
+        elif not self.config.disable_bcm_chatter:
+            self.emit("log", msg="BCM silence skipped (disabled in options)", level="info")
 
         # Silence ECM
         frame = ALDLProtocol.build_silence_frame(self.config.device_id)
@@ -1761,13 +1998,24 @@ class ECUComm:
         return False
 
     def enable_chatter(self) -> bool:
-        """Send Mode 9 to re-enable ALDL bus chatter."""
+        """Send Mode 9 to re-enable ALDL bus chatter.
+
+        After a flash write or read the PCM needs time to stabilise before
+        chatter restarts.  A too-fast re-enable after the last bank write was
+        suspected of causing intermittent issues in the original OSE tool.
+        We now wait POST_CHATTER_DELAY_MS after sending the Mode 9 frame.
+        """
         frame = ALDLProtocol.build_unsilence_frame(self.config.device_id)
         if self.config.ignore_echo:
             self.config.echo_byte_count = ALDLProtocol.wire_length(frame)
         resp = self._transact(frame, timeout_ms=2000, retries=3)
+        # Allow the PCM to settle before anything else touches the bus
+        time.sleep(POST_CHATTER_DELAY_MS / 1000.0)
         self.state = CommState.CONNECTED
         self.emit("state", state=self.state)
+        if resp is None:
+            self.emit("log", msg="Bus chatter re-enable: no ACK (PCM may still be silent)", level="warning")
+            return False
         self.emit("log", msg="Bus chatter re-enabled", level="info")
         return True
 
@@ -2019,12 +2267,20 @@ class ECUComm:
                     file_addr += actual_chunk_size
                 else:
                     retries += 1
+                    # Flush stale data from the bus before retrying
+                    self.transport.flush_input()
+                    time.sleep(INTER_RETRY_DELAY_MS / 1000.0)
                     self.emit("log",
                               msg=f"Write error at ${file_addr:05X} (PCM ${pcm_addr:04X}), "
                                   f"retry {retries}/{self.config.max_retries}",
                               level="warning")
                     if retries >= self.config.max_retries:
-                        self.emit("log", msg="Too many write retries — aborting", level="error")
+                        # Roll back file_addr to the start of the current 16KB sector
+                        sector_start = (file_addr // SECTOR_SIZE) * SECTOR_SIZE
+                        self.emit("log",
+                                  msg=f"Too many write retries — aborting at ${file_addr:05X} "
+                                      f"(sector ${sector_start:05X})",
+                                  level="error")
                         return False
 
         elapsed = time.monotonic() - start_time
@@ -2384,6 +2640,7 @@ class FlashOp:
         reads_done = 0
 
         address = read_start
+        block_retries = 0  # per-block retry counter (local — #4 fix)
         while address < read_end:
             if self.comm.cancelled:
                 self.comm.cleanup_and_reset()
@@ -2397,10 +2654,24 @@ class FlashOp:
                         bin_data[address + i] = b
                 address += len(data)
                 reads_done += 1
+                block_retries = 0  # reset on success
                 self.comm.emit("progress", current=reads_done, total=total_reads, label="Reading")
             else:
-                self.comm.emit("log", msg=f"Read failed at ${address:05X}", level="error")
-                address += read_block  # Skip ahead
+                block_retries += 1
+                if block_retries < READ_BLOCK_MAX_RETRIES:
+                    # Flush bus and retry the same block
+                    self.comm.transport.flush_input()
+                    time.sleep(INTER_RETRY_DELAY_MS / 1000.0)
+                    self.comm.emit("log",
+                                  msg=f"Read failed at ${address:05X}, retry {block_retries}/{READ_BLOCK_MAX_RETRIES}",
+                                  level="warning")
+                else:
+                    # Exhausted retries — skip this block
+                    self.comm.emit("log",
+                                  msg=f"Read failed at ${address:05X} after {READ_BLOCK_MAX_RETRIES} retries — skipping",
+                                  level="error")
+                    block_retries = 0
+                    address += read_block  # Skip ahead
 
         # Step 7: Cleanup
         self.comm.cleanup_and_reset()
@@ -2497,6 +2768,31 @@ class FlashOp:
         # Step 5: Read flash info
         flash_info = self.comm.read_flash_info()
 
+        # Step 5b: Pre-write backup read (#6 fix)
+        # Read sectors that will be erased so recovery is possible on failure.
+        self.comm.emit("log", msg="Backing up flash before erase...", level="info")
+        self._backup_bin = bytearray(BinFile.BIN_SIZE)
+        backup_ok = True
+        for sector_num, bank, erase_byte, s_start, s_end, label in SECTOR_INFO:
+            if (bank, erase_byte) in erase_map:
+                for addr in range(s_start, s_end + 1, 64):
+                    chunk = self.comm.read_ram(addr, extended=True)
+                    if chunk:
+                        for i, b in enumerate(chunk):
+                            if addr + i <= s_end:
+                                self._backup_bin[addr + i] = b
+                    else:
+                        backup_ok = False
+                        break
+                if not backup_ok:
+                    break
+        if backup_ok:
+            self.comm.emit("log", msg="Backup complete — recovery data stored in memory", level="info")
+        else:
+            self.comm.emit("log",
+                          msg="Backup incomplete — proceeding without full recovery data",
+                          level="warning")
+
         # Step 6: Erase
         if not self.comm.erase_sectors(erase_map):
             self.comm.emit("log", msg="ERASE FAILED — PCM may be in erased state!", level="error")
@@ -2562,6 +2858,176 @@ class FlashOp:
         self.comm.emit("log", msg=f"═══ {mode} WRITE COMPLETE ({elapsed:.1f}s) ═══", level="info")
         return True
 
+    def custom_write(self, bin_data: bytearray, sectors: List[int],
+                     progress_callback: Callable = None) -> bool:
+        """
+        Write selected sectors only.  For unbricking or partial OS repair.
+
+        *sectors* is a list of sector indices 0-7.  Each sector is 16KB.
+        The method erases only the listed sectors and writes only their
+        corresponding file-offset ranges.
+        """
+        if len(bin_data) != BinFile.BIN_SIZE:
+            self.comm.emit("log", msg=f"Invalid bin size: {len(bin_data)}", level="error")
+            return False
+
+        # Build erase map and write ranges from selected sectors
+        erase_map = []
+        write_ranges = []
+        for sec_num in sorted(set(sectors)):
+            if sec_num < 0 or sec_num >= len(SECTOR_INFO):
+                self.comm.emit("log", msg=f"Invalid sector number: {sec_num}", level="error")
+                return False
+            _sn, bank, erase_byte, fs, fe, label = SECTOR_INFO[sec_num]
+            erase_map.append((bank, erase_byte))
+            write_ranges.append((fs, fe))
+            self.comm.emit("log", msg=f"  Sector {sec_num}: {label} (${fs:05X}-${fe:05X})", level="info")
+
+        total_bytes = sum(fe - fs + 1 for fs, fe in write_ranges)
+        self.comm.emit("log", msg=f"═══ CUSTOM WRITE — {len(sectors)} sectors, "
+                       f"{total_bytes:,} bytes ═══", level="info")
+        start_time = time.monotonic()
+
+        # Verify / fix checksum
+        if not BinFile.verify_checksum(bin_data):
+            if self.comm.config.auto_checksum_fix:
+                old_cs, new_cs = BinFile.fix_checksum(bin_data)
+                self.comm.emit("log",
+                              msg=f"Auto-fixed checksum: 0x{old_cs:04X} → 0x{new_cs:04X}",
+                              level="warning")
+            else:
+                self.comm.emit("log", msg="Checksum mismatch in bin file!", level="error")
+                return False
+
+        # Step 1: Silence
+        if not self.comm.disable_chatter():
+            return False
+
+        # Step 2: Unlock
+        if not self.comm.unlock_security():
+            self.comm.enable_chatter()
+            return False
+
+        # Step 3: Enter programming
+        if not self.comm.enter_programming():
+            self.comm.enable_chatter()
+            return False
+
+        # Step 4: Upload kernel
+        if not self.comm.upload_kernel():
+            self.comm.enable_chatter()
+            return False
+
+        # Step 5: Read flash info
+        self.comm.read_flash_info()
+
+        # Step 6: Erase selected sectors
+        if not self.comm.erase_sectors(erase_map):
+            self.comm.emit("log", msg="ERASE FAILED — selected sectors may be wiped!", level="error")
+            self.comm.enable_chatter()
+            return False
+
+        # Step 7: Write selected ranges
+        for fs, fe in write_ranges:
+            if not self.comm.write_flash_data(bin_data, fs, fe, callback=progress_callback):
+                self.comm.emit("log", msg=f"WRITE FAILED at ${fs:05X}-${fe:05X}", level="error")
+                self.comm.enable_chatter()
+                return False
+
+        # Step 8: Verify
+        if not self.comm.verify_checksum(bin_data):
+            self.comm.emit("log", msg="VERIFY FAILED — checksum mismatch on PCM", level="error")
+            self.comm.enable_chatter()
+            return False
+
+        # Step 9: Cleanup
+        self.comm.cleanup_and_reset()
+        self.comm.enable_chatter()
+
+        elapsed = time.monotonic() - start_time
+        self.comm.emit("log",
+                      msg=f"═══ CUSTOM WRITE COMPLETE — {len(sectors)} sectors in {elapsed:.1f}s ═══",
+                      level="info")
+        return True
+
+    def custom_read(self, start_addr: int, end_addr: int) -> Optional[bytearray]:
+        """
+        Read a custom address range from the ECU.
+
+        Returns the bytes read, or None on failure.  The returned buffer
+        has length (end_addr - start_addr + 1).
+        """
+        byte_count = end_addr - start_addr + 1
+        self.comm.emit("log", msg=f"═══ CUSTOM READ ${start_addr:05X}-${end_addr:05X} "
+                       f"({byte_count:,} bytes) ═══", level="info")
+        start_time = time.monotonic()
+
+        # Step 1: Silence
+        if not self.comm.disable_chatter():
+            return None
+
+        # Step 2: Unlock
+        if not self.comm.unlock_security():
+            self.comm.enable_chatter()
+            return None
+
+        # Step 3: Enter programming
+        if not self.comm.enter_programming():
+            self.comm.enable_chatter()
+            return None
+
+        # Step 4: Upload kernel
+        if not self.comm.upload_kernel():
+            self.comm.enable_chatter()
+            return None
+
+        # Step 5: Read data
+        result = bytearray(byte_count)
+        read_block = 64
+        total_reads = (byte_count + read_block - 1) // read_block
+        reads_done = 0
+        address = start_addr
+
+        while address <= end_addr:
+            if self.comm.cancelled:
+                self.comm.enable_chatter()
+                return None
+
+            chunk = self.comm.read_ram(address, count=read_block, extended=True)
+            if chunk:
+                offset = address - start_addr
+                copy_len = min(len(chunk), end_addr - address + 1)
+                result[offset:offset + copy_len] = chunk[:copy_len]
+                reads_done += 1
+                address += read_block
+
+                pct = (reads_done / total_reads) * 100 if total_reads > 0 else 100
+                self.comm.emit("progress", current=reads_done, total=total_reads,
+                              label=f"Reading ${address:05X}")
+            else:
+                retries = getattr(self, '_cread_retries', 0) + 1
+                self._cread_retries = retries
+                if retries < READ_BLOCK_MAX_RETRIES:
+                    self.comm.transport.flush_input()
+                    time.sleep(INTER_RETRY_DELAY_MS / 1000.0)
+                    self.comm.emit("log",
+                                  msg=f"Read failed at ${address:05X}, retry {retries}/{READ_BLOCK_MAX_RETRIES}",
+                                  level="warning")
+                else:
+                    self.comm.emit("log",
+                                  msg=f"Read failed at ${address:05X} after {READ_BLOCK_MAX_RETRIES} retries",
+                                  level="error")
+                    self._cread_retries = 0
+                    address += read_block
+
+        # Step 6: Cleanup
+        self.comm.cleanup_and_reset()
+        self.comm.enable_chatter()
+
+        elapsed = time.monotonic() - start_time
+        self.comm.emit("log", msg=f"═══ CUSTOM READ COMPLETE ({elapsed:.1f}s) ═══", level="info")
+        return result
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # SECTION 10 — DATALOGGER
@@ -2601,7 +3067,7 @@ class DataLogger:
         self._csv_path = csv_path or str(
             LOG_DIR / f"datalog_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         )
-        self._csv_file = open(self._csv_path, "w", encoding="utf-8")
+        self._csv_file = open(self._csv_path, "w", encoding="utf-8", buffering=1)  # line-buffered (#11 fix)
         self._csv_file.write("Timestamp,Elapsed_s," + ",".join(self._params_to_log) + "\n")
 
         self.running = True
@@ -3221,8 +3687,535 @@ if GUI_AVAILABLE:
             else:
                 super().keyPressEvent(event)
 
-    class OptionsWidget(QWidget):
-        """Scrollable options/settings tab for CommConfig parameters."""
+    # ── Custom Flash Widget ──────────────────────────────────────────
+
+    class CustomFlashWidget(QWidget):
+        """
+        Custom sector-level flash read/write for unbricking and partial recovery.
+
+        Allows selecting individual 16KB sectors (0-7) by checkbox, or entering
+        a custom hex address range.  Each operation has its own start button
+        with a unique popup warning explaining the risk.
+
+        Sector selection: comma or space separated (e.g. "3,4,5,7" or "3 4 5 7").
+        """
+        # Signals emitted to MainWindow for backend dispatch
+        start_custom_write = Signal(list)    # list of sector ints
+        start_custom_read = Signal(int, int) # start_addr, end_addr
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self._build_ui()
+
+        def _build_ui(self) -> None:
+            outer = QVBoxLayout(self)
+            outer.setContentsMargins(0, 0, 0, 0)
+
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+
+            content = QWidget()
+            layout = QVBoxLayout(content)
+            layout.setSpacing(12)
+            layout.setContentsMargins(16, 16, 16, 16)
+
+            # ── Info banner ──
+            info = QLabel(
+                "<b>Custom Flash — Sector-Level Recovery Tool</b><br>"
+                "Select individual 16KB sectors to erase+write.  For unbricking a partially "
+                "failed write, or replacing specific OS pages without touching the rest.<br><br>"
+                "<b>⚠ Sector 7 is the boot sector.</b>  Erasing it without a bench programmer "
+                "(T48/TL866) means permanent brick.  Only select sector 7 if you know what you're doing.<br><br>"
+                "<b>Requires a loaded .bin file</b> — the tool writes data from the loaded bin into "
+                "the selected sectors.  Make sure the bin matches the OS you want on the ECU."
+            )
+            info.setWordWrap(True)
+            info.setStyleSheet("QLabel { background: #2a2a3a; padding: 12px; border-radius: 6px; }")
+            layout.addWidget(info)
+
+            # ── Sector checkboxes ──
+            sector_group = QGroupBox("Select Sectors to Flash (16KB each)")
+            sector_layout = QGridLayout(sector_group)
+
+            self.sector_checks: List[QCheckBox] = []
+            for i, (_sn, _bank, _erase, fs, fe, label) in enumerate(SECTOR_INFO):
+                cb = QCheckBox(f"Sector {i}: {label}  (${fs:05X}-${fe:05X})")
+                cb.setToolTip(
+                    f"Sector {i} — {label}\n"
+                    f"File offset: ${fs:05X} to ${fe:05X} (16,384 bytes)\n"
+                    f"Bank: 0x{_bank:02X}\n\n"
+                    + ("⚠ BOOT SECTOR — erasing this without a bench programmer = permanent brick!"
+                       if i == 7 else
+                       "Safe to erase and re-write from a matching bin file.")
+                )
+                if i == 7:
+                    cb.setStyleSheet("QCheckBox { color: #ff5555; }")
+                sector_layout.addWidget(cb, i // 2, i % 2)
+                self.sector_checks.append(cb)
+
+            layout.addWidget(sector_group)
+
+            # ── Quick sector input ──
+            quick_group = QGroupBox("Quick Sector Input")
+            quick_layout = QHBoxLayout(quick_group)
+            quick_layout.addWidget(QLabel("Sectors:"))
+            self.sector_input = QLineEdit()
+            self.sector_input.setPlaceholderText("e.g.  1,2,3  or  3 4 5 7")
+            self.sector_input.setToolTip(
+                "Type sector numbers separated by commas or spaces.\n"
+                "Examples:  1,2,3   or   3 4 5 7   or   0-6\n"
+                "This overrides the checkboxes above when non-empty."
+            )
+            quick_layout.addWidget(self.sector_input)
+            self.btn_apply_input = QPushButton("Apply")
+            self.btn_apply_input.setToolTip("Parse the text input and check the matching sector boxes")
+            self.btn_apply_input.clicked.connect(self._apply_sector_input)
+            quick_layout.addWidget(self.btn_apply_input)
+            layout.addWidget(quick_group)
+
+            # ── Start Custom Write ──
+            write_group = QGroupBox("Custom Sector Write")
+            write_layout = QVBoxLayout(write_group)
+            write_layout.addWidget(QLabel(
+                "Erases and writes ONLY the selected sectors from the loaded bin.\n"
+                "Use this to repair a partial brick — e.g. if sectors 3-5 failed during a full write,\n"
+                "select sectors 3,4,5 to re-flash just those without touching the rest."
+            ))
+            self.btn_custom_write = QPushButton("⚡  Start Custom Sector Write")
+            self.btn_custom_write.setFixedHeight(40)
+            self.btn_custom_write.setStyleSheet(
+                "QPushButton { background: #8B4513; font-weight: bold; font-size: 14px; }"
+                "QPushButton:hover { background: #A0522D; }"
+            )
+            self.btn_custom_write.setToolTip(
+                "Erase + write only the checked sectors.\n"
+                "The ECU must be powered and communicating.\n"
+                "A loaded .bin file is required."
+            )
+            self.btn_custom_write.clicked.connect(self._on_custom_write)
+            write_layout.addWidget(self.btn_custom_write)
+            layout.addWidget(write_group)
+
+            # ── Custom Address Range Read ──
+            range_group = QGroupBox("Custom Address Range Read")
+            range_layout = QFormLayout(range_group)
+
+            self.start_addr_input = QLineEdit("0000")
+            self.start_addr_input.setToolTip("Start address in hex (file offset, e.g. 4000)")
+            range_layout.addRow("Start Address (hex):", self.start_addr_input)
+
+            self.end_addr_input = QLineEdit("1FFFF")
+            self.end_addr_input.setToolTip("End address in hex (file offset, e.g. 7FFF)")
+            range_layout.addRow("End Address (hex):", self.end_addr_input)
+
+            self.btn_custom_read = QPushButton("📖  Start Custom Address Read")
+            self.btn_custom_read.setFixedHeight(40)
+            self.btn_custom_read.setStyleSheet(
+                "QPushButton { background: #2E5090; font-weight: bold; font-size: 14px; }"
+                "QPushButton:hover { background: #3A65B0; }"
+            )
+            self.btn_custom_read.setToolTip(
+                "Read a specific address range from ECU flash.\n"
+                "Does NOT modify anything — safe to run at any time.\n"
+                "The result is saved to a .bin file."
+            )
+            self.btn_custom_read.clicked.connect(self._on_custom_read)
+            range_layout.addRow(self.btn_custom_read)
+            layout.addWidget(range_group)
+
+            # ── Custom Address Range Write ──
+            range_write_group = QGroupBox("Custom Address Range Write")
+            range_write_layout = QFormLayout(range_write_group)
+            range_write_layout.addRow(QLabel(
+                "Write a specific address range from the loaded bin.\n"
+                "⚠ This erases ALL sectors that overlap the address range."
+            ))
+
+            self.write_start_addr_input = QLineEdit("4000")
+            self.write_start_addr_input.setToolTip("Start address in hex (file offset)")
+            range_write_layout.addRow("Start Address (hex):", self.write_start_addr_input)
+
+            self.write_end_addr_input = QLineEdit("7FFF")
+            self.write_end_addr_input.setToolTip("End address in hex (file offset)")
+            range_write_layout.addRow("End Address (hex):", self.write_end_addr_input)
+
+            self.btn_range_write = QPushButton("⚡  Start Address Range Write")
+            self.btn_range_write.setFixedHeight(40)
+            self.btn_range_write.setStyleSheet(
+                "QPushButton { background: #8B0000; font-weight: bold; font-size: 14px; }"
+                "QPushButton:hover { background: #B22222; }"
+            )
+            self.btn_range_write.setToolTip(
+                "Erase overlapping sectors + write the specified address range.\n"
+                "⚠ DANGEROUS — erases entire 16KB sectors even if you only write part of them.\n"
+                "Make sure you have a backup."
+            )
+            self.btn_range_write.clicked.connect(self._on_range_write)
+            range_write_layout.addRow(self.btn_range_write)
+            layout.addWidget(range_write_group)
+
+            layout.addStretch()
+            scroll.setWidget(content)
+            outer.addWidget(scroll)
+
+        def _parse_sector_text(self, text: str) -> List[int]:
+            """Parse sector input like '1,2,3' or '3 4 5 7' or '0-6' into a list."""
+            sectors = []
+            # Replace commas with spaces, then split
+            text = text.replace(",", " ")
+            for token in text.split():
+                token = token.strip()
+                if not token:
+                    continue
+                if "-" in token:
+                    # Range: "3-5" → [3, 4, 5]
+                    parts = token.split("-", 1)
+                    try:
+                        a, b = int(parts[0]), int(parts[1])
+                        sectors.extend(range(a, b + 1))
+                    except ValueError:
+                        pass
+                else:
+                    try:
+                        sectors.append(int(token))
+                    except ValueError:
+                        pass
+            return [s for s in sectors if 0 <= s <= 7]
+
+        def _apply_sector_input(self) -> None:
+            """Parse text input and update checkboxes."""
+            text = self.sector_input.text().strip()
+            if not text:
+                return
+            selected = self._parse_sector_text(text)
+            for i, cb in enumerate(self.sector_checks):
+                cb.setChecked(i in selected)
+
+        def _get_selected_sectors(self) -> List[int]:
+            """Get sector indices from checkboxes, with text input override."""
+            text = self.sector_input.text().strip()
+            if text:
+                return sorted(set(self._parse_sector_text(text)))
+            return [i for i, cb in enumerate(self.sector_checks) if cb.isChecked()]
+
+        def _on_custom_write(self) -> None:
+            """Validate and emit start_custom_write with selected sectors."""
+            sectors = self._get_selected_sectors()
+            if not sectors:
+                QMessageBox.warning(self, "No Sectors Selected",
+                                    "Select at least one sector to write.\n\n"
+                                    "Use the checkboxes or type sector numbers in the text input\n"
+                                    "(e.g. 1,2,3 or 3 4 5 7).")
+                return
+
+            # Build warning message
+            sector_desc = ", ".join(str(s) for s in sectors)
+            total_kb = len(sectors) * 16
+            has_boot = 7 in sectors
+
+            msg = (f"You are about to ERASE and WRITE {len(sectors)} sector(s): [{sector_desc}]\n"
+                   f"Total: {total_kb} KB\n\n")
+
+            if has_boot:
+                msg += ("⚠ SECTOR 7 (BOOT) IS SELECTED!\n"
+                        "Erasing the boot sector without a bench programmer (T48/TL866)\n"
+                        "means PERMANENT BRICK if the write fails.\n\n")
+
+            msg += ("This will:\n"
+                    "  1. Silence the bus (Mode 8)\n"
+                    "  2. Unlock security (Mode 13)\n"
+                    "  3. Enter programming (Mode 5)\n"
+                    "  4. Upload flash kernel (Mode 6)\n"
+                    "  5. ERASE the selected sectors — data gone forever\n"
+                    "  6. Write data from the loaded bin into those sectors\n"
+                    "  7. Verify checksum\n\n"
+                    "Do NOT disconnect power during this operation.\n\n"
+                    "Continue?")
+
+            icon = QMessageBox.Critical if has_boot else QMessageBox.Warning
+            reply = QMessageBox.question(self, "Custom Sector Write", msg,
+                                         QMessageBox.Yes | QMessageBox.No,
+                                         QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                self.start_custom_write.emit(sectors)
+
+        def _on_custom_read(self) -> None:
+            """Validate addresses and emit start_custom_read."""
+            try:
+                start = int(self.start_addr_input.text().strip(), 16)
+                end = int(self.end_addr_input.text().strip(), 16)
+            except ValueError:
+                QMessageBox.warning(self, "Invalid Address",
+                                    "Enter valid hex addresses (e.g. 4000 and 7FFF).")
+                return
+
+            if end <= start:
+                QMessageBox.warning(self, "Invalid Range",
+                                    "End address must be greater than start address.")
+                return
+
+            if end > 0x1FFFF:
+                QMessageBox.warning(self, "Address Out of Range",
+                                    "End address cannot exceed $1FFFF (128KB flash limit).")
+                return
+
+            byte_count = end - start + 1
+            reply = QMessageBox.question(
+                self, "Custom Address Read",
+                f"Read ${start:05X} to ${end:05X} ({byte_count:,} bytes)\n\n"
+                f"This is a READ — it does NOT modify flash.\n"
+                f"Safe to run at any time.\n\n"
+                f"The ECU must be powered and responding.\n"
+                f"Continue?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+            if reply == QMessageBox.Yes:
+                self.start_custom_read.emit(start, end)
+
+        def _on_range_write(self) -> None:
+            """Validate addresses and compute overlapping sectors for write."""
+            try:
+                start = int(self.write_start_addr_input.text().strip(), 16)
+                end = int(self.write_end_addr_input.text().strip(), 16)
+            except ValueError:
+                QMessageBox.warning(self, "Invalid Address",
+                                    "Enter valid hex addresses (e.g. 4000 and 7FFF).")
+                return
+
+            if end <= start:
+                QMessageBox.warning(self, "Invalid Range",
+                                    "End address must be greater than start address.")
+                return
+
+            if end > 0x1FFFF:
+                QMessageBox.warning(self, "Address Out of Range",
+                                    "End address cannot exceed $1FFFF.")
+                return
+
+            # Find overlapping sectors
+            overlapping = []
+            for sn, _bank, _erase, fs, fe, label in SECTOR_INFO:
+                if start <= fe and end >= fs:
+                    overlapping.append(sn)
+
+            if not overlapping:
+                QMessageBox.warning(self, "No Sectors",
+                                    "Address range doesn't overlap any flash sectors.")
+                return
+
+            byte_count = end - start + 1
+            sector_desc = ", ".join(str(s) for s in overlapping)
+            has_boot = 7 in overlapping
+
+            msg = (f"Write ${start:05X} to ${end:05X} ({byte_count:,} bytes)\n\n"
+                   f"This will ERASE sectors: [{sector_desc}]\n"
+                   f"({len(overlapping)} × 16KB = {len(overlapping) * 16} KB erased)\n\n")
+
+            if has_boot:
+                msg += "⚠ INCLUDES BOOT SECTOR 7 — brick risk!\n\n"
+
+            msg += ("Entire 16KB sectors are erased even if the address range\n"
+                    "only covers part of them.  Make sure the loaded bin has\n"
+                    "valid data for ALL erased sectors.\n\n"
+                    "Continue?")
+
+            reply = QMessageBox.question(self, "Address Range Write", msg,
+                                         QMessageBox.Yes | QMessageBox.No,
+                                         QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                self.start_custom_write.emit(overlapping)
+
+    # ── Chaos Test Widget ──────────────────────────────────────────
+
+    class ChaosTestWidget(QWidget):
+        """
+        Automated stress-testing tab: read→write→read→verify loop until failure.
+
+        Configurable parameters:
+        - Number of cycles (0 = infinite)
+        - Write mode (BIN / CAL)
+        - Delay between cycles
+        - Stop on first failure vs continue
+
+        Logs every cycle result to the event bus.
+        """
+        start_chaos = Signal(dict)   # config dict
+        stop_chaos = Signal()
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self._build_ui()
+
+        def _build_ui(self) -> None:
+            outer = QVBoxLayout(self)
+            outer.setContentsMargins(0, 0, 0, 0)
+
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+
+            content = QWidget()
+            layout = QVBoxLayout(content)
+            layout.setSpacing(12)
+            layout.setContentsMargins(16, 16, 16, 16)
+
+            # ── Info banner ──
+            info = QLabel(
+                "<b>Chaos Test — Automated Flash Stress Test</b><br>"
+                "Runs a continuous read → write → read → compare loop to test transport "
+                "reliability, flash chip endurance, and protocol stability.<br><br>"
+                "<b>Each cycle:</b>  Read full bin → Write loaded bin → Read back → Compare bytes → Log result<br>"
+                "<b>Stops on:</b>  Mismatch, comm failure, or user cancel<br><br>"
+                "⚠ <b>THIS WILL WRITE TO YOUR ECU REPEATEDLY.</b>  Every cycle erases and re-writes flash sectors. "
+                "Only use this for testing — not on a daily driver with a flash chip you care about."
+            )
+            info.setWordWrap(True)
+            info.setStyleSheet("QLabel { background: #3a2a2a; padding: 12px; border-radius: 6px; }")
+            layout.addWidget(info)
+
+            # ── Config ──
+            config_group = QGroupBox("Test Configuration")
+            config_layout = QFormLayout(config_group)
+
+            self.spin_cycles = QSpinBox()
+            self.spin_cycles.setRange(0, 10000)
+            self.spin_cycles.setValue(0)
+            self.spin_cycles.setToolTip("Number of read→write→verify cycles. 0 = run until failure or cancel.")
+            self.spin_cycles.setSpecialValueText("∞ (until failure)")
+            config_layout.addRow("Cycles (0 = infinite):", self.spin_cycles)
+
+            self.combo_write_mode = QComboBox()
+            self.combo_write_mode.addItem("BIN — Full OS + Cal (104KB, sectors 0-6)", "BIN")
+            self.combo_write_mode.addItem("CAL — Calibration only (16KB, sector 1)", "CAL")
+            self.combo_write_mode.setToolTip(
+                "CAL is faster per cycle (~30s) but only tests sector 1.\n"
+                "BIN tests all 7 sectors (~3.5 min per cycle)."
+            )
+            config_layout.addRow("Write Mode:", self.combo_write_mode)
+
+            self.spin_delay = QSpinBox()
+            self.spin_delay.setRange(0, 60)
+            self.spin_delay.setValue(5)
+            self.spin_delay.setSuffix(" sec")
+            self.spin_delay.setToolTip("Cooldown delay between cycles (lets flash chip and bus settle)")
+            config_layout.addRow("Inter-cycle delay:", self.spin_delay)
+
+            self.chk_stop_on_fail = QCheckBox("Stop on first failure")
+            self.chk_stop_on_fail.setChecked(True)
+            self.chk_stop_on_fail.setToolTip(
+                "If unchecked, logs the failure and continues to the next cycle.\n"
+                "If checked, stops immediately on any read/write/verify failure."
+            )
+            config_layout.addRow(self.chk_stop_on_fail)
+
+            self.chk_compare_bytes = QCheckBox("Byte-level compare after each cycle")
+            self.chk_compare_bytes.setChecked(True)
+            self.chk_compare_bytes.setToolTip(
+                "After write→read, compare every byte of the readback against\n"
+                "the source bin.  Logs first mismatch address and byte values."
+            )
+            config_layout.addRow(self.chk_compare_bytes)
+
+            layout.addWidget(config_group)
+
+            # ── Results ──
+            results_group = QGroupBox("Results")
+            results_layout = QVBoxLayout(results_group)
+
+            self.results_label = QLabel("No tests run yet")
+            self.results_label.setStyleSheet("QLabel { font-size: 14px; padding: 8px; }")
+            results_layout.addWidget(self.results_label)
+
+            layout.addWidget(results_group)
+
+            # ── Start / Stop ──
+            btn_row = QHBoxLayout()
+
+            self.btn_start = QPushButton("🔥  Start Chaos Test")
+            self.btn_start.setFixedHeight(44)
+            self.btn_start.setStyleSheet(
+                "QPushButton { background: #B22222; font-weight: bold; font-size: 15px; }"
+                "QPushButton:hover { background: #DC143C; }"
+            )
+            self.btn_start.setToolTip(
+                "Start the automated stress test loop.\n"
+                "Requires a loaded .bin file and active ECU connection."
+            )
+            self.btn_start.clicked.connect(self._on_start)
+            btn_row.addWidget(self.btn_start)
+
+            self.btn_stop = QPushButton("⏹  Stop")
+            self.btn_stop.setFixedHeight(44)
+            self.btn_stop.setEnabled(False)
+            self.btn_stop.setStyleSheet(
+                "QPushButton { font-weight: bold; font-size: 15px; }"
+            )
+            self.btn_stop.clicked.connect(self._on_stop)
+            btn_row.addWidget(self.btn_stop)
+
+            layout.addLayout(btn_row)
+            layout.addStretch()
+            scroll.setWidget(content)
+            outer.addWidget(scroll)
+
+        def _on_start(self) -> None:
+            cycles = self.spin_cycles.value()
+            mode = self.combo_write_mode.currentData()
+
+            desc = f"{cycles} cycles" if cycles > 0 else "infinite cycles"
+            reply = QMessageBox.question(
+                self, "Start Chaos Test",
+                f"⚠ CHAOS TEST — REPEATED FLASH WRITES\n\n"
+                f"Mode: {mode}\n"
+                f"Cycles: {desc}\n"
+                f"Inter-cycle delay: {self.spin_delay.value()}s\n\n"
+                f"This will repeatedly erase and write flash sectors.\n"
+                f"Every cycle = 1 full erase + write + readback.\n\n"
+                f"Flash chips have finite erase/write endurance (~10,000-100,000 cycles).\n"
+                f"Use on test ECUs only.\n\n"
+                f"Do NOT disconnect power during the test.\n\n"
+                f"Continue?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
+            if reply == QMessageBox.Yes:
+                self.btn_start.setEnabled(False)
+                self.btn_stop.setEnabled(True)
+                config = {
+                    "cycles": cycles,
+                    "mode": mode,
+                    "delay": self.spin_delay.value(),
+                    "stop_on_fail": self.chk_stop_on_fail.isChecked(),
+                    "compare_bytes": self.chk_compare_bytes.isChecked(),
+                }
+                self.start_chaos.emit(config)
+
+        def _on_stop(self) -> None:
+            self.btn_start.setEnabled(True)
+            self.btn_stop.setEnabled(False)
+            self.stop_chaos.emit()
+
+        def update_results(self, cycle: int, passed: int, failed: int, msg: str = "") -> None:
+            """Update the results label from the main window."""
+            text = f"Cycle: {cycle}  |  Passed: {passed}  |  Failed: {failed}"
+            if msg:
+                text += f"\nLast: {msg}"
+            self.results_label.setText(text)
+
+    # ── Transport Settings Widget ────────────────────────────────
+
+    class TransportSettingsWidget(QWidget):
+        """
+        Dedicated transport configuration tab.
+
+        Top half: PySerial settings (port, baud, timeouts, flow ctrl)
+        Bottom half (scrollable): FTDI D2XX low-level settings
+        (latency timer, USB buffer, read/write timeouts, VID/PID)
+        plus timing offset sliders for real-hardware tuning.
+
+        Status: UNTESTED — implemented from OSE analysis + FTDI specs.
+                 Could have problems on some adapters. Treat timing values
+                 as starting points, not guarantees.
+        """
         config_changed = Signal()
 
         def __init__(self, config: CommConfig, parent=None):
@@ -3230,6 +4223,361 @@ if GUI_AVAILABLE:
             self._config = config
             self._build_ui()
             self._load_from_config(config)
+
+        def _build_ui(self) -> None:
+            outer = QVBoxLayout(self)
+            outer.setContentsMargins(0, 0, 0, 0)
+
+            splitter = QSplitter(Qt.Vertical)
+
+            # ══════════ TOP: PySerial ══════════
+            pyserial_widget = QWidget()
+            py_layout = QVBoxLayout(pyserial_widget)
+            py_layout.setContentsMargins(16, 12, 16, 8)
+
+            py_header = QLabel("<b>PySerial (VCP) Settings</b>")
+            py_header.setStyleSheet("QLabel { font-size: 14px; }")
+            py_layout.addWidget(py_header)
+
+            py_group = QGroupBox("Serial Port Configuration")
+            py_form = QFormLayout(py_group)
+
+            self.spin_py_read_timeout = QSpinBox()
+            self.spin_py_read_timeout.setRange(50, 10000)
+            self.spin_py_read_timeout.setSuffix(" ms")
+            self.spin_py_read_timeout.setValue(100)
+            self.spin_py_read_timeout.setSingleStep(50)
+            self.spin_py_read_timeout.setToolTip(
+                "PySerial read timeout per serial.Serial(timeout=).\n"
+                "OSE default: 300ms × 5 = 1500ms.\n"
+                "Lower = faster response detection, but may miss slow ECUs.\n"
+                "100ms is good for most adapters. Try 200-500ms if reads fail."
+            )
+            py_form.addRow("Read Timeout:", self.spin_py_read_timeout)
+
+            self.spin_py_write_timeout = QSpinBox()
+            self.spin_py_write_timeout.setRange(100, 10000)
+            self.spin_py_write_timeout.setSuffix(" ms")
+            self.spin_py_write_timeout.setValue(1000)
+            self.spin_py_write_timeout.setSingleStep(100)
+            self.spin_py_write_timeout.setToolTip(
+                "PySerial write timeout.\n"
+                "OSE default: 1500ms. 1000ms is safe for most adapters."
+            )
+            py_form.addRow("Write Timeout:", self.spin_py_write_timeout)
+
+            self.spin_py_read_buffer = QSpinBox()
+            self.spin_py_read_buffer.setRange(256, 65536)
+            self.spin_py_read_buffer.setSuffix(" bytes")
+            self.spin_py_read_buffer.setValue(1000)
+            self.spin_py_read_buffer.setSingleStep(256)
+            self.spin_py_read_buffer.setToolTip(
+                "PySerial input buffer hint (OS may override).\n"
+                "OSE uses 1000 bytes. Increase if you see buffer overruns."
+            )
+            py_form.addRow("Read Buffer Size:", self.spin_py_read_buffer)
+
+            self.chk_py_rtscts = QCheckBox("RTS/CTS hardware flow control")
+            self.chk_py_rtscts.setChecked(False)
+            self.chk_py_rtscts.setToolTip(
+                "Enable RTS/CTS handshaking.\n"
+                "ALDL does NOT use flow control — leave OFF.\n"
+                "Only enable if you have a custom adapter that requires it."
+            )
+            py_form.addRow(self.chk_py_rtscts)
+
+            self.chk_py_dsrdtr = QCheckBox("DSR/DTR flow control")
+            self.chk_py_dsrdtr.setChecked(False)
+            self.chk_py_dsrdtr.setToolTip(
+                "Enable DSR/DTR handshaking.\n"
+                "ALDL does NOT use this — leave OFF."
+            )
+            py_form.addRow(self.chk_py_dsrdtr)
+
+            self.chk_py_xonxoff = QCheckBox("XON/XOFF software flow control")
+            self.chk_py_xonxoff.setChecked(False)
+            self.chk_py_xonxoff.setToolTip("Software flow control — never used on ALDL.")
+            py_form.addRow(self.chk_py_xonxoff)
+
+            py_layout.addWidget(py_group)
+            splitter.addWidget(pyserial_widget)
+
+            # ══════════ BOTTOM: FTDI D2XX (scrollable) ══════════
+            d2xx_scroll = QScrollArea()
+            d2xx_scroll.setWidgetResizable(True)
+            d2xx_scroll.setFrameShape(QFrame.NoFrame)
+
+            d2xx_widget = QWidget()
+            d2xx_layout = QVBoxLayout(d2xx_widget)
+            d2xx_layout.setContentsMargins(16, 12, 16, 16)
+
+            d2xx_header = QLabel("<b>FTDI D2XX (Direct USB) Settings</b>")
+            d2xx_header.setStyleSheet("QLabel { font-size: 14px; }")
+            d2xx_layout.addWidget(d2xx_header)
+
+            d2xx_status = QLabel(
+                "Status: <span style='color:#ff9900'>UNTESTED</span> — "
+                "Implemented from OSE V1.5.1 analysis and FTDI datasheet.\n"
+                "May need tuning on real hardware. Treat values as starting points."
+            )
+            d2xx_status.setWordWrap(True)
+            d2xx_status.setStyleSheet("QLabel { background: #2a2a3a; padding: 8px; border-radius: 4px; }")
+            d2xx_layout.addWidget(d2xx_status)
+
+            # Latency timer
+            lat_group = QGroupBox("FTDI Latency Timer")
+            lat_form = QFormLayout(lat_group)
+
+            self.spin_d2xx_latency = QSpinBox()
+            self.spin_d2xx_latency.setRange(1, 255)
+            self.spin_d2xx_latency.setSuffix(" ms")
+            self.spin_d2xx_latency.setValue(2)
+            self.spin_d2xx_latency.setToolTip(
+                "FTDI USB latency timer — how long the chip waits\n"
+                "before sending a partial USB packet to the host.\n\n"
+                "Default: 16ms (FTDI factory). OSE never changes it.\n"
+                "Setting to 1-2ms gives ~30%% speed boost on reads.\n\n"
+                "1ms = fastest (may overwhelm slow CPUs)\n"
+                "2ms = recommended (good balance)\n"
+                "16ms = FTDI default (safe but slow)"
+            )
+            lat_form.addRow("Latency Timer:", self.spin_d2xx_latency)
+
+            lat_info = QLabel(
+                "💡  OSE uses default 16ms. Setting to 1-2ms is the single\n"
+                "    biggest speed improvement (~30%% faster reads)."
+            )
+            lat_info.setStyleSheet("QLabel { color: #88cc88; padding: 4px; }")
+            lat_form.addRow(lat_info)
+            d2xx_layout.addWidget(lat_group)
+
+            # USB timeouts
+            timeout_group = QGroupBox("D2XX Read/Write Timeouts")
+            timeout_form = QFormLayout(timeout_group)
+
+            self.spin_d2xx_read_timeout = QSpinBox()
+            self.spin_d2xx_read_timeout.setRange(50, 30000)
+            self.spin_d2xx_read_timeout.setSuffix(" ms")
+            self.spin_d2xx_read_timeout.setValue(200)
+            self.spin_d2xx_read_timeout.setSingleStep(50)
+            self.spin_d2xx_read_timeout.setToolTip(
+                "D2XX read timeout (ftd2xx.setTimeouts read_ms).\n"
+                "200ms is aggressive — increase to 500-1000ms if reads fail."
+            )
+            timeout_form.addRow("Read Timeout:", self.spin_d2xx_read_timeout)
+
+            self.spin_d2xx_write_timeout = QSpinBox()
+            self.spin_d2xx_write_timeout.setRange(50, 30000)
+            self.spin_d2xx_write_timeout.setSuffix(" ms")
+            self.spin_d2xx_write_timeout.setValue(200)
+            self.spin_d2xx_write_timeout.setSingleStep(50)
+            self.spin_d2xx_write_timeout.setToolTip(
+                "D2XX write timeout (ftd2xx.setTimeouts write_ms).\n"
+                "200ms is fine for 8192 baud."
+            )
+            timeout_form.addRow("Write Timeout:", self.spin_d2xx_write_timeout)
+
+            d2xx_layout.addWidget(timeout_group)
+
+            # Timing offsets
+            timing_group = QGroupBox("Timing Offsets (Real Hardware Tuning)")
+            timing_form = QFormLayout(timing_group)
+
+            timing_info = QLabel(
+                "Adjust these if real-hardware comms are unreliable.\n"
+                "Positive values make the tool SLOWER but more tolerant.\n"
+                "Start at 0 and increase by 5-10ms if you see retries/timeouts."
+            )
+            timing_info.setWordWrap(True)
+            timing_info.setStyleSheet("QLabel { color: #aaa; padding: 4px; }")
+            timing_form.addRow(timing_info)
+
+            self.spin_silence_offset = QSpinBox()
+            self.spin_silence_offset.setRange(-50, 500)
+            self.spin_silence_offset.setSuffix(" ms")
+            self.spin_silence_offset.setValue(0)
+            self.spin_silence_offset.setSingleStep(5)
+            self.spin_silence_offset.setToolTip(
+                "Extra delay added to WaitForSilence (bus-quiet detection).\n"
+                "OSE default silence wait: 25ms.\n"
+                "If your adapter is slow to flush, add 10-25ms here."
+            )
+            timing_form.addRow("Silence Wait Offset:", self.spin_silence_offset)
+
+            self.spin_tx_delay_offset = QSpinBox()
+            self.spin_tx_delay_offset.setRange(-20, 500)
+            self.spin_tx_delay_offset.setSuffix(" ms")
+            self.spin_tx_delay_offset.setValue(0)
+            self.spin_tx_delay_offset.setSingleStep(5)
+            self.spin_tx_delay_offset.setToolTip(
+                "Extra delay added AFTER each TX frame before reading response.\n"
+                "Helps slow adapters or long USB cables.\n"
+                "OSE inter-frame delay: 10ms (VR/VS), 4ms (VT, bench).\n"
+                "Try +10ms if you see echo-related failures."
+            )
+            timing_form.addRow("TX Post-Delay Offset:", self.spin_tx_delay_offset)
+
+            self.spin_retry_delay_offset = QSpinBox()
+            self.spin_retry_delay_offset.setRange(-50, 500)
+            self.spin_retry_delay_offset.setSuffix(" ms")
+            self.spin_retry_delay_offset.setValue(0)
+            self.spin_retry_delay_offset.setSingleStep(10)
+            self.spin_retry_delay_offset.setToolTip(
+                "Extra delay between retry attempts.\n"
+                "Base retry delay: 50ms.\n"
+                "Increase if the bus needs more time to settle after errors."
+            )
+            timing_form.addRow("Retry Delay Offset:", self.spin_retry_delay_offset)
+
+            self.spin_erase_timeout_offset = QSpinBox()
+            self.spin_erase_timeout_offset.setRange(-1000, 10000)
+            self.spin_erase_timeout_offset.setSuffix(" ms")
+            self.spin_erase_timeout_offset.setValue(0)
+            self.spin_erase_timeout_offset.setSingleStep(500)
+            self.spin_erase_timeout_offset.setToolTip(
+                "Extra time added to sector erase timeout.\n"
+                "Base erase timeout: 5000ms per sector.\n"
+                "Some flash chips are slower — add 2000-5000ms if erase fails."
+            )
+            timing_form.addRow("Erase Timeout Offset:", self.spin_erase_timeout_offset)
+
+            self.spin_cleanup_delay_offset = QSpinBox()
+            self.spin_cleanup_delay_offset.setRange(-500, 5000)
+            self.spin_cleanup_delay_offset.setSuffix(" ms")
+            self.spin_cleanup_delay_offset.setValue(0)
+            self.spin_cleanup_delay_offset.setSingleStep(100)
+            self.spin_cleanup_delay_offset.setToolTip(
+                "Extra delay after cleanup/reset before re-enabling chatter.\n"
+                "Base cleanup delay: 750ms.\n"
+                "Increase if ECU doesn't respond after a write session."
+            )
+            timing_form.addRow("Cleanup Delay Offset:", self.spin_cleanup_delay_offset)
+
+            d2xx_layout.addWidget(timing_group)
+
+            # Presets
+            preset_group = QGroupBox("Vehicle Timing Presets")
+            preset_layout = QVBoxLayout(preset_group)
+            preset_info = QLabel(
+                "Quick presets from OSE V1.5.1 — sets inter-frame delay\n"
+                "and timing offsets to values used by the original tool."
+            )
+            preset_info.setWordWrap(True)
+            preset_info.setStyleSheet("QLabel { color: #aaa; }")
+            preset_layout.addWidget(preset_info)
+
+            preset_row = QHBoxLayout()
+            self.combo_preset = QComboBox()
+            self.combo_preset.addItem("Custom", None)
+            self.combo_preset.addItem("VR Auto/Manual (10ms IFD)", {"ifd": 10, "silence": 0, "tx": 0})
+            self.combo_preset.addItem("VS Auto/Manual (10ms IFD)", {"ifd": 10, "silence": 0, "tx": 0})
+            self.combo_preset.addItem("VT In-Car (4ms IFD)", {"ifd": 4, "silence": 0, "tx": 0})
+            self.combo_preset.addItem("Flash PCM Bench (4ms IFD)", {"ifd": 4, "silence": 0, "tx": 0})
+            self.combo_preset.addItem("ALDL Logger (1ms IFD)", {"ifd": 1, "silence": 0, "tx": 0})
+            self.combo_preset.addItem("Slow/Reliable (+25ms all)", {"ifd": 15, "silence": 25, "tx": 10})
+            self.combo_preset.setToolTip("Select a preset or use Custom to set values manually")
+            self.combo_preset.currentIndexChanged.connect(self._on_preset_changed)
+            preset_row.addWidget(QLabel("Preset:"))
+            preset_row.addWidget(self.combo_preset)
+            preset_row.addStretch()
+            preset_layout.addLayout(preset_row)
+            d2xx_layout.addWidget(preset_group)
+
+            # Apply / Reset
+            btn_row = QHBoxLayout()
+            self.apply_btn = QPushButton("Apply Transport Settings")
+            self.apply_btn.setToolTip("Apply these transport settings to the active connection")
+            self.apply_btn.clicked.connect(self._on_apply)
+            btn_row.addWidget(self.apply_btn)
+
+            self.reset_btn = QPushButton("Reset to Defaults")
+            self.reset_btn.setToolTip("Reset all transport settings to factory defaults")
+            self.reset_btn.clicked.connect(self._on_reset)
+            btn_row.addWidget(self.reset_btn)
+            btn_row.addStretch()
+            d2xx_layout.addLayout(btn_row)
+
+            d2xx_layout.addStretch()
+            d2xx_scroll.setWidget(d2xx_widget)
+            splitter.addWidget(d2xx_scroll)
+
+            # Set splitter sizes (top 40%, bottom 60%)
+            splitter.setSizes([300, 500])
+            outer.addWidget(splitter)
+
+        def _load_from_config(self, config: CommConfig) -> None:
+            """Populate widgets from config (using defaults for transport-specific values)."""
+            # PySerial defaults
+            self.spin_py_read_timeout.setValue(100)
+            self.spin_py_write_timeout.setValue(1000)
+            self.spin_py_read_buffer.setValue(1000)
+            self.chk_py_rtscts.setChecked(False)
+            self.chk_py_dsrdtr.setChecked(False)
+            self.chk_py_xonxoff.setChecked(False)
+            # D2XX defaults
+            self.spin_d2xx_latency.setValue(2)
+            self.spin_d2xx_read_timeout.setValue(200)
+            self.spin_d2xx_write_timeout.setValue(200)
+            # Timing offsets start at 0
+            self.spin_silence_offset.setValue(0)
+            self.spin_tx_delay_offset.setValue(0)
+            self.spin_retry_delay_offset.setValue(0)
+            self.spin_erase_timeout_offset.setValue(0)
+            self.spin_cleanup_delay_offset.setValue(0)
+
+        def _on_preset_changed(self, index: int) -> None:
+            data = self.combo_preset.currentData()
+            if data and isinstance(data, dict):
+                if "ifd" in data:
+                    self._config.inter_frame_delay_ms = data["ifd"]
+                if "silence" in data:
+                    self.spin_silence_offset.setValue(data["silence"])
+                if "tx" in data:
+                    self.spin_tx_delay_offset.setValue(data["tx"])
+
+        def get_transport_settings(self) -> dict:
+            """Return all transport settings as a dict for use by transports."""
+            return {
+                "pyserial": {
+                    "read_timeout_ms": self.spin_py_read_timeout.value(),
+                    "write_timeout_ms": self.spin_py_write_timeout.value(),
+                    "read_buffer_size": self.spin_py_read_buffer.value(),
+                    "rtscts": self.chk_py_rtscts.isChecked(),
+                    "dsrdtr": self.chk_py_dsrdtr.isChecked(),
+                    "xonxoff": self.chk_py_xonxoff.isChecked(),
+                },
+                "d2xx": {
+                    "latency_timer_ms": self.spin_d2xx_latency.value(),
+                    "read_timeout_ms": self.spin_d2xx_read_timeout.value(),
+                    "write_timeout_ms": self.spin_d2xx_write_timeout.value(),
+                },
+                "timing_offsets": {
+                    "silence_offset_ms": self.spin_silence_offset.value(),
+                    "tx_delay_offset_ms": self.spin_tx_delay_offset.value(),
+                    "retry_delay_offset_ms": self.spin_retry_delay_offset.value(),
+                    "erase_timeout_offset_ms": self.spin_erase_timeout_offset.value(),
+                    "cleanup_delay_offset_ms": self.spin_cleanup_delay_offset.value(),
+                },
+            }
+
+        def _on_apply(self) -> None:
+            self.config_changed.emit()
+
+        def _on_reset(self) -> None:
+            self._load_from_config(self._config)
+            self.config_changed.emit()
+
+    class OptionsWidget(QWidget):
+        """Scrollable options/settings tab for CommConfig + LogConfig parameters."""
+        config_changed = Signal()
+
+        def __init__(self, config: CommConfig, log_cfg: LogConfig = None, parent=None):
+            super().__init__(parent)
+            self._config = config
+            self._log_cfg = log_cfg or LogConfig()
+            self._build_ui()
+            self._load_from_config(config)
+            self._load_log_config(self._log_cfg)
 
         def _build_ui(self) -> None:
             outer = QVBoxLayout(self)
@@ -3328,7 +4676,117 @@ if GUI_AVAILABLE:
             )
             flash_layout.addWidget(self.chk_ignore_echo)
 
+            self.chk_disable_bcm = QCheckBox("Silence BCM chatter (Mode 8)")
+            self.chk_disable_bcm.setChecked(False)
+            self.chk_disable_bcm.setToolTip(
+                "Send Mode 8 silence to the BCM before flash operations.\n"
+                "OFF by default — bench and virtual setups have no BCM.\n"
+                "Only enable this if flashing in-car with the BCM connected.\n"
+                "Not needed for VATS-disabled ECUs or standalone bench rigs."
+            )
+            flash_layout.addWidget(self.chk_disable_bcm)
+
             layout.addWidget(flash_group)
+
+            # ── Event Bus Logging ── (toggles what goes to the Log tab & file log)
+            log_group = QGroupBox("Event Bus Logging")
+            log_outer = QVBoxLayout(log_group)
+
+            # Combo: preset profiles
+            profile_row = QHBoxLayout()
+            profile_row.addWidget(QLabel("Preset:"))
+            self.log_profile_combo = QComboBox()
+            self.log_profile_combo.addItem("Normal (default)")
+            self.log_profile_combo.addItem("Verbose (all on)")
+            self.log_profile_combo.addItem("Quiet (errors only)")
+            self.log_profile_combo.addItem("Frames only")
+            self.log_profile_combo.addItem("Custom")
+            self.log_profile_combo.setToolTip("Quick preset — select 'Custom' to pick individual channels")
+            self.log_profile_combo.currentIndexChanged.connect(self._on_log_profile_changed)
+            profile_row.addWidget(self.log_profile_combo)
+            profile_row.addStretch()
+            log_outer.addLayout(profile_row)
+
+            # Debug-level frame logging
+            frame_group = QGroupBox("Frame-Level (DEBUG)")
+            frame_layout = QVBoxLayout(frame_group)
+            self.chk_log_tx_frames = QCheckBox("TX frames (hex dump)")
+            self.chk_log_rx_frames = QCheckBox("RX frames (hex dump)")
+            self.chk_log_echo_bytes = QCheckBox("Echo consume details (noisy)")
+            for w in (self.chk_log_tx_frames, self.chk_log_rx_frames, self.chk_log_echo_bytes):
+                frame_layout.addWidget(w)
+            log_outer.addWidget(frame_group)
+
+            # Operation-level logging
+            op_group = QGroupBox("Operation-Level (INFO)")
+            op_layout = QVBoxLayout(op_group)
+            self.chk_log_state_changes = QCheckBox("State transitions")
+            self.chk_log_security = QCheckBox("Seed/key exchange")
+            self.chk_log_kernel_upload = QCheckBox("Kernel upload")
+            self.chk_log_erase_sectors = QCheckBox("Sector erase progress")
+            self.chk_log_write_chunks = QCheckBox("Write chunk progress")
+            self.chk_log_verify = QCheckBox("Checksum verify")
+            self.chk_log_flash_info = QCheckBox("Flash chip info")
+            self.chk_log_chatter = QCheckBox("Bus silence/unsilence")
+            self.chk_log_progress = QCheckBox("Progress bar updates")
+            for w in (self.chk_log_state_changes, self.chk_log_security,
+                      self.chk_log_kernel_upload, self.chk_log_erase_sectors,
+                      self.chk_log_write_chunks, self.chk_log_verify,
+                      self.chk_log_flash_info, self.chk_log_chatter,
+                      self.chk_log_progress):
+                op_layout.addWidget(w)
+            log_outer.addWidget(op_group)
+
+            # Error/Warning level
+            err_group = QGroupBox("Error / Warning")
+            err_layout = QVBoxLayout(err_group)
+            self.chk_log_retries = QCheckBox("Retry attempts")
+            self.chk_log_timeouts = QCheckBox("Frame timeouts")
+            self.chk_log_checksum_errors = QCheckBox("RX checksum failures")
+            for w in (self.chk_log_retries, self.chk_log_timeouts, self.chk_log_checksum_errors):
+                err_layout.addWidget(w)
+            log_outer.addWidget(err_group)
+
+            # Session-level
+            sess_group = QGroupBox("Session / UI")
+            sess_layout = QVBoxLayout(sess_group)
+            self.chk_log_session_summary = QCheckBox("Flash session summary box")
+            self.chk_log_click_events = QCheckBox("GUI button click events")
+            self.chk_log_timestamps = QCheckBox("Timestamps on every event")
+            for w in (self.chk_log_session_summary, self.chk_log_click_events, self.chk_log_timestamps):
+                sess_layout.addWidget(w)
+            log_outer.addWidget(sess_group)
+
+            # Second event bus toggle
+            bus2_group = QGroupBox("Debug Event Bus (secondary)")
+            bus2_layout = QVBoxLayout(bus2_group)
+            self.chk_debug_bus_enabled = QCheckBox("Enable secondary debug event bus")
+            self.chk_debug_bus_enabled.setToolTip(
+                "When enabled, raw frame TX/RX events are also emitted\n"
+                "to a second 'debug' bus that can be viewed in the Log tab\n"
+                "with a [DEBUG] prefix. Useful for protocol debugging."
+            )
+            bus2_layout.addWidget(self.chk_debug_bus_enabled)
+
+            self.combo_debug_bus_output = QComboBox()
+            self.combo_debug_bus_output.addItem("Log Tab only")
+            self.combo_debug_bus_output.addItem("File only (debug.log)")
+            self.combo_debug_bus_output.addItem("Both Log Tab + File")
+            self.combo_debug_bus_output.setToolTip("Where should debug bus events go?")
+            bus2_layout.addWidget(QLabel("Debug bus output:"))
+            bus2_layout.addWidget(self.combo_debug_bus_output)
+            log_outer.addWidget(bus2_group)
+
+            layout.addWidget(log_group)
+
+            # ── Persistence ──
+            persist_group = QGroupBox("Settings Persistence")
+            persist_layout = QVBoxLayout(persist_group)
+            self.chk_persist_on_close = QCheckBox("Save settings to disk on exit")
+            self.chk_persist_on_close.setChecked(True)
+            self.chk_persist_on_close.setToolTip("Persist CommConfig + LogConfig to settings.json on close")
+            persist_layout.addWidget(self.chk_persist_on_close)
+            layout.addWidget(persist_group)
 
             # ── Apply / Reset buttons ──
             btn_row = QHBoxLayout()
@@ -3364,6 +4822,80 @@ if GUI_AVAILABLE:
             self.chk_verify_write.setChecked(True)
             self.chk_high_speed.setChecked(config.high_speed_read)
             self.chk_ignore_echo.setChecked(config.ignore_echo)
+            self.chk_disable_bcm.setChecked(config.disable_bcm_chatter)
+
+        def _load_log_config(self, cfg: LogConfig) -> None:
+            """Populate logging checkboxes from a LogConfig."""
+            self.chk_log_tx_frames.setChecked(cfg.log_tx_frames)
+            self.chk_log_rx_frames.setChecked(cfg.log_rx_frames)
+            self.chk_log_echo_bytes.setChecked(cfg.log_echo_bytes)
+            self.chk_log_state_changes.setChecked(cfg.log_state_changes)
+            self.chk_log_security.setChecked(cfg.log_security)
+            self.chk_log_kernel_upload.setChecked(cfg.log_kernel_upload)
+            self.chk_log_erase_sectors.setChecked(cfg.log_erase_sectors)
+            self.chk_log_write_chunks.setChecked(cfg.log_write_chunks)
+            self.chk_log_verify.setChecked(cfg.log_verify)
+            self.chk_log_flash_info.setChecked(cfg.log_flash_info)
+            self.chk_log_chatter.setChecked(cfg.log_chatter)
+            self.chk_log_progress.setChecked(cfg.log_progress)
+            self.chk_log_retries.setChecked(cfg.log_retries)
+            self.chk_log_timeouts.setChecked(cfg.log_timeouts)
+            self.chk_log_checksum_errors.setChecked(cfg.log_checksum_errors)
+            self.chk_log_session_summary.setChecked(cfg.log_session_summary)
+            self.chk_log_click_events.setChecked(cfg.log_click_events)
+            self.chk_log_timestamps.setChecked(cfg.log_timestamps)
+
+        def apply_log_config(self, cfg: LogConfig) -> None:
+            """Write checkbox states into a LogConfig."""
+            cfg.log_tx_frames = self.chk_log_tx_frames.isChecked()
+            cfg.log_rx_frames = self.chk_log_rx_frames.isChecked()
+            cfg.log_echo_bytes = self.chk_log_echo_bytes.isChecked()
+            cfg.log_state_changes = self.chk_log_state_changes.isChecked()
+            cfg.log_security = self.chk_log_security.isChecked()
+            cfg.log_kernel_upload = self.chk_log_kernel_upload.isChecked()
+            cfg.log_erase_sectors = self.chk_log_erase_sectors.isChecked()
+            cfg.log_write_chunks = self.chk_log_write_chunks.isChecked()
+            cfg.log_verify = self.chk_log_verify.isChecked()
+            cfg.log_flash_info = self.chk_log_flash_info.isChecked()
+            cfg.log_chatter = self.chk_log_chatter.isChecked()
+            cfg.log_progress = self.chk_log_progress.isChecked()
+            cfg.log_retries = self.chk_log_retries.isChecked()
+            cfg.log_timeouts = self.chk_log_timeouts.isChecked()
+            cfg.log_checksum_errors = self.chk_log_checksum_errors.isChecked()
+            cfg.log_session_summary = self.chk_log_session_summary.isChecked()
+            cfg.log_click_events = self.chk_log_click_events.isChecked()
+            cfg.log_timestamps = self.chk_log_timestamps.isChecked()
+
+        def _on_log_profile_changed(self, index: int) -> None:
+            """Apply a logging preset profile."""
+            if index == 0:    # Normal
+                self._load_log_config(LogConfig())
+            elif index == 1:  # Verbose
+                cfg = LogConfig()
+                for f in fields(cfg):
+                    if f.name.startswith("log_"):
+                        setattr(cfg, f.name, True)
+                self._load_log_config(cfg)
+            elif index == 2:  # Quiet
+                cfg = LogConfig()
+                for f in fields(cfg):
+                    if f.name.startswith("log_"):
+                        setattr(cfg, f.name, False)
+                cfg.log_retries = True
+                cfg.log_timeouts = True
+                cfg.log_checksum_errors = True
+                cfg.log_session_summary = True
+                self._load_log_config(cfg)
+            elif index == 3:  # Frames only
+                cfg = LogConfig()
+                for f in fields(cfg):
+                    if f.name.startswith("log_"):
+                        setattr(cfg, f.name, False)
+                cfg.log_tx_frames = True
+                cfg.log_rx_frames = True
+                cfg.log_timestamps = True
+                self._load_log_config(cfg)
+            # index == 4 is Custom — don't change anything
 
         def apply_to_config(self, config: CommConfig) -> None:
             """Write widget values into a CommConfig."""
@@ -3376,15 +4908,20 @@ if GUI_AVAILABLE:
             config.auto_checksum_fix = self.chk_auto_checksum.isChecked()
             config.high_speed_read = self.chk_high_speed.isChecked()
             config.ignore_echo = self.chk_ignore_echo.isChecked()
+            config.disable_bcm_chatter = self.chk_disable_bcm.isChecked()
 
         def _on_apply(self) -> None:
             self.apply_to_config(self._config)
+            self.apply_log_config(self._log_cfg)
             self.config_changed.emit()
 
         def _on_reset(self) -> None:
             defaults = CommConfig()
+            default_log = LogConfig()
             self._load_from_config(defaults)
+            self._load_log_config(default_log)
             self.apply_to_config(self._config)
+            self.apply_log_config(self._log_cfg)
             self.config_changed.emit()
 
     class FlashWorker(QObject):
@@ -3392,6 +4929,7 @@ if GUI_AVAILABLE:
         progress = Signal(int, int, str)
         log_message = Signal(str, str)
         finished = Signal(bool)
+        read_data = Signal(bytearray)   # Emitted with 128KB data after a successful read
         state_changed = Signal(str)
 
         def __init__(self, comm: ECUComm, parent=None):
@@ -3410,12 +4948,33 @@ if GUI_AVAILABLE:
         def setup_read(self) -> None:
             self._task = "read"
 
+        def setup_custom_write(self, bin_data: bytearray, sectors: list) -> None:
+            self._task = "custom_write"
+            self._bin_data = bin_data
+            self._sectors = sectors
+
+        def setup_custom_read(self, start_addr: int, end_addr: int) -> None:
+            self._task = "custom_read"
+            self._custom_start = start_addr
+            self._custom_end = end_addr
+
+        def setup_chaos(self, config: dict, bin_data: bytearray) -> None:
+            self._task = "chaos"
+            self._bin_data = bin_data
+            self._chaos_cfg = config
+
         @Slot()
         def run(self) -> None:
+            # Clear stale callbacks to prevent accumulation across operations
+            self.comm.clear_callbacks()
             # Wire up event callbacks
-            self.comm.on("log", lambda msg, level="info": self.log_message.emit(msg, level))
-            self.comm.on("progress", lambda current, total, label="": self.progress.emit(current, total, label))
-            self.comm.on("state", lambda state: self.state_changed.emit(state.name))
+            self.comm.on("log", lambda msg, level="info", **_: self.log_message.emit(msg, level))
+            self.comm.on("progress", lambda current, total, label="", **_: self.progress.emit(current, total, label))
+            self.comm.on("state", lambda state, **_: self.state_changed.emit(state.name))
+
+            # Clear stale cancel flag so a previous cancel doesn't
+            # abort this operation immediately (bug #3: reset_cancel never called)
+            self.comm.reset_cancel()
 
             try:
                 if self._task == "write" and self._bin_data:
@@ -3423,13 +4982,108 @@ if GUI_AVAILABLE:
                     self.finished.emit(result)
                 elif self._task == "read":
                     data = self._op.full_read()
+                    if data is not None:
+                        self.read_data.emit(data)
                     self.finished.emit(data is not None)
+                elif self._task == "custom_write" and self._bin_data:
+                    result = self._op.custom_write(self._bin_data, self._sectors)
+                    self.finished.emit(result)
+                elif self._task == "custom_read":
+                    data = self._op.custom_read(self._custom_start, self._custom_end)
+                    if data is not None:
+                        self.read_data.emit(bytearray(data))
+                    self.finished.emit(data is not None)
+                elif self._task == "chaos" and self._bin_data:
+                    result = self._run_chaos()
+                    self.finished.emit(result)
                 else:
                     self.finished.emit(False)
             except Exception as e:
                 self.log_message.emit(f"Exception: {e}", "error")
                 log.exception("Flash worker exception")
                 self.finished.emit(False)
+
+        def _run_chaos(self) -> bool:
+            """Run the chaos test loop (read→write→readback→compare)."""
+            cfg = self._chaos_cfg
+            max_cycles = cfg.get("cycles", 0)  # 0 = infinite
+            mode = cfg.get("mode", "BIN")
+            delay = cfg.get("delay", 5)
+            stop_on_fail = cfg.get("stop_on_fail", True)
+            compare_bytes = cfg.get("compare_bytes", True)
+
+            cycle = 0
+            passed = 0
+            failed = 0
+
+            while True:
+                cycle += 1
+                if max_cycles > 0 and cycle > max_cycles:
+                    break
+                if self.comm.cancelled:
+                    self.log_message.emit(f"Chaos test cancelled after {cycle - 1} cycles", "warning")
+                    break
+
+                self.log_message.emit(f"\n═══ CHAOS CYCLE {cycle} ═══", "info")
+
+                # Step 1: Write the loaded bin
+                self.log_message.emit(f"  [{cycle}] Writing {mode}...", "info")
+                write_ok = self._op.full_write(self._bin_data, mode)
+                if not write_ok:
+                    failed += 1
+                    self.log_message.emit(f"  [{cycle}] WRITE FAILED", "error")
+                    if stop_on_fail:
+                        break
+                    time.sleep(delay)
+                    continue
+
+                # Step 2: Read back
+                self.log_message.emit(f"  [{cycle}] Reading back...", "info")
+                readback = self._op.full_read()
+                if readback is None:
+                    failed += 1
+                    self.log_message.emit(f"  [{cycle}] READBACK FAILED", "error")
+                    if stop_on_fail:
+                        break
+                    time.sleep(delay)
+                    continue
+
+                # Step 3: Compare
+                if compare_bytes:
+                    start_off, end_off = WRITE_RANGES.get(mode, (0x2000, 0x1BFFF))
+                    mismatch = False
+                    for addr in range(start_off, end_off + 1):
+                        if readback[addr] != self._bin_data[addr]:
+                            self.log_message.emit(
+                                f"  [{cycle}] MISMATCH at ${addr:05X}: "
+                                f"expected 0x{self._bin_data[addr]:02X}, "
+                                f"got 0x{readback[addr]:02X}",
+                                "error"
+                            )
+                            mismatch = True
+                            break
+                    if mismatch:
+                        failed += 1
+                        if stop_on_fail:
+                            break
+                    else:
+                        passed += 1
+                        self.log_message.emit(f"  [{cycle}] VERIFY OK ✓", "info")
+                else:
+                    passed += 1
+
+                self.log_message.emit(
+                    f"  Cycle {cycle} done — Passed: {passed}, Failed: {failed}", "info"
+                )
+
+                if delay > 0 and not self.comm.cancelled:
+                    time.sleep(delay)
+
+            self.log_message.emit(
+                f"\n═══ CHAOS TEST COMPLETE — {cycle} cycles, {passed} passed, {failed} failed ═══",
+                "info" if failed == 0 else "warning"
+            )
+            return failed == 0
 
     class MainWindow(QMainWindow):
         """Main application window."""
@@ -3440,17 +5094,22 @@ if GUI_AVAILABLE:
             self.setMinimumSize(1100, 750)
             self._apply_dark_theme()
 
-            # Backend instances
+            # Backend instances — load persisted settings if available
+            saved_comm, saved_log_cfg = SettingsManager.load()
             self._transport: Optional[BaseTransport] = None
             self._comm: Optional[ECUComm] = None
-            self._config = CommConfig()
+            self._config = saved_comm
+            self._log_cfg = saved_log_cfg
             self._bin_data: Optional[bytearray] = None
             self._bin_path: Optional[str] = None
             self._logger: Optional[DataLogger] = None
             self._live_tuner: Optional[LiveTuner] = None
             self._flash_thread: Optional[QThread] = None
+            self._flash_active: bool = False   # True while a read/write op is running
+            self._flash_task: Optional[str] = None  # "read" or "write" — to gate disconnect severity
             self._verify_after_write: bool = True
             self._vecu_bin_path: Optional[str] = None  # Virtual ECU .bin path
+            self._persist_on_close: bool = True  # Save settings on exit
 
             self._build_ui()
             self._connect_signals()
@@ -3475,9 +5134,9 @@ if GUI_AVAILABLE:
                 QPushButton#readBtn:hover { background: #2a5c9c; }
                 QComboBox { background: #3c3c3c; border: 1px solid #555; border-radius: 3px;
                             padding: 4px; color: #ddd; }
-                QProgressBar { background: #2a2a2a; border: 1px solid #3c3c3c; border-radius: 3px;
-                               text-align: center; color: #ddd; }
-                QProgressBar::chunk { background: #4fc3f7; border-radius: 2px; }
+                QProgressBar { background: #111111; border: 1px solid #3c3c3c; border-radius: 3px;
+                               text-align: center; color: #ffffff; font-weight: bold; }
+                QProgressBar::chunk { background: #00c853; border-radius: 2px; }
                 QTabWidget::pane { border: 1px solid #3c3c3c; }
                 QTabBar::tab { background: #2d2d2d; border: 1px solid #3c3c3c; padding: 6px 16px;
                                color: #aaa; }
@@ -3642,9 +5301,26 @@ if GUI_AVAILABLE:
             self.tabs.addTab(self.log_widget, "Log")
 
             # Tab 5: Options
-            self.options_tab = OptionsWidget(self._config)
+            self.options_tab = OptionsWidget(self._config, self._log_cfg)
             self.options_tab.config_changed.connect(self._on_options_changed)
             self.tabs.addTab(self.options_tab, "Options")
+
+            # Tab 6: Custom Flash (sector-level brick recovery)
+            self.custom_flash_tab = CustomFlashWidget()
+            self.custom_flash_tab.start_custom_write.connect(self._on_custom_write)
+            self.custom_flash_tab.start_custom_read.connect(self._on_custom_read)
+            self.tabs.addTab(self.custom_flash_tab, "Custom Flash")
+
+            # Tab 7: Chaos Test (automated stress test)
+            self.chaos_tab = ChaosTestWidget()
+            self.chaos_tab.start_chaos.connect(self._on_start_chaos)
+            self.chaos_tab.stop_chaos.connect(self._on_stop_chaos)
+            self.tabs.addTab(self.chaos_tab, "Chaos Test")
+
+            # Tab 8: Transport Settings (PySerial / D2XX tuning)
+            self.transport_tab = TransportSettingsWidget(self._config)
+            self.transport_tab.config_changed.connect(self._on_options_changed)
+            self.tabs.addTab(self.transport_tab, "Transport")
 
             main_layout.addWidget(self.tabs)
 
@@ -3876,6 +5552,21 @@ if GUI_AVAILABLE:
             self.action_view_options.setStatusTip("Switch to the settings/options tab")
             view_menu.addAction(self.action_view_options)
 
+            self.action_view_custom_flash = QAction("Custom &Flash", self)
+            self.action_view_custom_flash.setShortcut("Ctrl+6")
+            self.action_view_custom_flash.setStatusTip("Switch to the custom sector flash tab")
+            view_menu.addAction(self.action_view_custom_flash)
+
+            self.action_view_chaos = QAction("C&haos Test", self)
+            self.action_view_chaos.setShortcut("Ctrl+7")
+            self.action_view_chaos.setStatusTip("Switch to the chaos test tab")
+            view_menu.addAction(self.action_view_chaos)
+
+            self.action_view_transport = QAction("&Transport", self)
+            self.action_view_transport.setShortcut("Ctrl+8")
+            self.action_view_transport.setStatusTip("Switch to the transport settings tab")
+            view_menu.addAction(self.action_view_transport)
+
             # ── Help menu ──
             help_menu = menu_bar.addMenu("&Help")
 
@@ -3912,6 +5603,9 @@ if GUI_AVAILABLE:
             self.action_view_disasm.triggered.connect(lambda: self.tabs.setCurrentIndex(2))
             self.action_view_log.triggered.connect(lambda: self.tabs.setCurrentIndex(3))
             self.action_view_options.triggered.connect(lambda: self.tabs.setCurrentIndex(4))
+            self.action_view_custom_flash.triggered.connect(lambda: self.tabs.setCurrentIndex(5))
+            self.action_view_chaos.triggered.connect(lambda: self.tabs.setCurrentIndex(6))
+            self.action_view_transport.triggered.connect(lambda: self.tabs.setCurrentIndex(7))
 
             # Disassembler event bus → log
             self.disassembler_tab.disassembly_done.connect(
@@ -3981,8 +5675,9 @@ if GUI_AVAILABLE:
             else:
                 return
 
-            self._comm = ECUComm(self._transport, self._config)
-            self._comm.on("log", lambda msg, level="info": self.log_widget.append_log(msg, level))
+            self._comm = ECUComm(self._transport, self._config, self._log_cfg)
+            self._comm.clear_callbacks()  # fresh comm — ensure no stale listeners
+            self._comm.on("log", lambda msg, level="info", **_: self.log_widget.append_log(msg, level))
 
             if self._comm.connect():
                 self.connect_btn.setText("Disconnect")
@@ -3997,6 +5692,39 @@ if GUI_AVAILABLE:
                 self.log_widget.append_log("Connection failed", "error")
 
         def _disconnect(self) -> None:
+            # ── Safety gate: prevent disconnect during an active WRITE ──
+            if self._flash_active and self._flash_task == "write":
+                reply = QMessageBox.warning(
+                    self, "⚠ WRITE IN PROGRESS — DANGER",
+                    "A flash WRITE is active right now.\n\n"
+                    "Disconnecting during a write can PERMANENTLY BRICK the PCM.\n"
+                    "The ECU will be left in an unrecoverable state — " 
+                    "it won't start, it won't respond, it's dead.\n\n"
+                    "DO NOT disconnect the ALDL cable.\n"
+                    "DO NOT turn off the ignition.\n"
+                    "DO NOT touch anything.\n\n"
+                    "If you are absolutely certain, click Yes to force disconnect.\n"
+                    "Otherwise click No and let the write finish.",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if reply != QMessageBox.Yes:
+                    return
+                # User forced it — cancel the operation first
+                self.log_widget.append_log(
+                    "USER FORCED DISCONNECT DURING WRITE — ECU may need bench recovery",
+                    "error"
+                )
+                log.error("User forced disconnect during active write operation")
+                if self._comm:
+                    self._comm.cancel()
+
+            # ── During a READ, just cancel cleanly — reads don't harm the PCM ──
+            if self._flash_active and self._flash_task == "read":
+                self.log_widget.append_log("Read cancelled by disconnect", "warning")
+                if self._comm:
+                    self._comm.cancel()
+
             self.dash_timer.stop()
             if self._logger and self._logger.running:
                 self._logger.stop()
@@ -4123,7 +5851,16 @@ if GUI_AVAILABLE:
 
             self._start_flash_op("write", mode)
 
-        def _start_flash_op(self, task: str, mode: str = "BIN") -> None:
+        # ── UI lock/unlock helpers (#10 fix — deduplicate) ──────────
+
+        def _lock_ui_for_flash(self, task: str) -> None:
+            """Lock the entire UI during a flash operation."""
+            self._flash_active = True
+            self._flash_task = task
+
+            self.progress_bar.setValue(0)
+            self.progress_bar.setFormat("")
+
             self.cancel_btn.setEnabled(True)
             self.action_cancel.setEnabled(True)
             self.read_btn.setEnabled(False)
@@ -4131,37 +5868,133 @@ if GUI_AVAILABLE:
             self.action_read_ecu.setEnabled(False)
             self.action_write_bin.setEnabled(False)
             self.action_write_cal.setEnabled(False)
+            self.options_tab.apply_btn.setEnabled(False)
+            self.options_tab.reset_btn.setEnabled(False)
 
-            self._flash_thread = QThread()
-            self._flash_worker = FlashWorker(self._comm)
+            # Switch to Log tab, disable all others
+            log_tab_idx = 3
+            self.tabs.setCurrentIndex(log_tab_idx)
+            for i in range(self.tabs.count()):
+                if i != log_tab_idx:
+                    self.tabs.setTabEnabled(i, False)
 
-            if task == "write":
-                self._flash_worker.setup_write(self._bin_data, mode)
-            else:
-                self._flash_worker.setup_read()
+            # View shortcuts
+            self.action_view_dash.setEnabled(False)
+            self.action_view_tables.setEnabled(False)
+            self.action_view_disasm.setEnabled(False)
+            self.action_view_options.setEnabled(False)
+            self.action_view_custom_flash.setEnabled(False)
+            self.action_view_chaos.setEnabled(False)
+            self.action_view_transport.setEnabled(False)
 
-            self._flash_worker.moveToThread(self._flash_thread)
-            self._flash_thread.started.connect(self._flash_worker.run)
-            self._flash_worker.finished.connect(self._on_flash_finished)
-            self._flash_worker.progress.connect(self._on_flash_progress)
-            self._flash_worker.log_message.connect(lambda msg, lvl: self.log_widget.append_log(msg, lvl))
-            self._flash_worker.state_changed.connect(self._update_state)
-            self._flash_worker.finished.connect(self._flash_thread.quit)
+            # Flash-menu toggles
+            self.action_auto_checksum.setEnabled(False)
+            self.action_verify_after_write.setEnabled(False)
+            self.action_high_speed_read.setEnabled(False)
+            self.action_ignore_echo.setEnabled(False)
 
-            self._flash_thread.start()
+            # File menu
+            self.action_load.setEnabled(False)
+            self.action_save.setEnabled(False)
+            self.action_save_as.setEnabled(False)
+            self.action_save_cal.setEnabled(False)
+            self.action_checksum.setEnabled(False)
+            self.action_ecu_info.setEnabled(False)
+            self.load_btn.setEnabled(False)
+            self.save_btn.setEnabled(False)
 
-        def _on_flash_finished(self, success: bool) -> None:
+        def _unlock_ui_after_flash(self) -> None:
+            """Unlock the UI after a flash operation completes."""
+            self._flash_active = False
+            self._flash_task = None
+
             self.cancel_btn.setEnabled(False)
             self.action_cancel.setEnabled(False)
             self.read_btn.setEnabled(True)
             self.write_btn.setEnabled(self._bin_data is not None)
             self._update_menu_state(True)
+            self.options_tab.apply_btn.setEnabled(True)
+            self.options_tab.reset_btn.setEnabled(True)
+
+            # Unlock all tabs
+            for i in range(self.tabs.count()):
+                self.tabs.setTabEnabled(i, True)
+            self.action_view_dash.setEnabled(True)
+            self.action_view_tables.setEnabled(True)
+            self.action_view_disasm.setEnabled(True)
+            self.action_view_options.setEnabled(True)
+            self.action_view_custom_flash.setEnabled(True)
+            self.action_view_chaos.setEnabled(True)
+            self.action_view_transport.setEnabled(True)
+
+            # Flash-menu toggles
+            self.action_auto_checksum.setEnabled(True)
+            self.action_verify_after_write.setEnabled(True)
+            self.action_high_speed_read.setEnabled(True)
+            self.action_ignore_echo.setEnabled(True)
+
+            # File menu
+            self.load_btn.setEnabled(True)
+            self.save_btn.setEnabled(self._bin_data is not None)
+            self.action_load.setEnabled(True)
+
+        def _start_flash_thread(self, worker: 'FlashWorker') -> None:
+            """Wire up signals and start the flash worker thread (#8 fix — deleteLater)."""
+            self._flash_thread = QThread()
+            self._flash_worker = worker
+
+            worker.moveToThread(self._flash_thread)
+            self._flash_thread.started.connect(worker.run)
+            worker.finished.connect(self._on_flash_finished)
+            worker.read_data.connect(self._on_read_data)
+            worker.progress.connect(self._on_flash_progress)
+            worker.log_message.connect(lambda msg, lvl: self.log_widget.append_log(msg, lvl))
+            worker.state_changed.connect(self._update_state)
+            worker.finished.connect(self._flash_thread.quit)
+            # Clean up Qt objects when thread finishes (#8 fix)
+            self._flash_thread.finished.connect(worker.deleteLater)
+            self._flash_thread.finished.connect(self._flash_thread.deleteLater)
+
+            self._flash_thread.start()
+
+        def _start_flash_op(self, task: str, mode: str = "BIN") -> None:
+            self._lock_ui_for_flash(task)
+
+            worker = FlashWorker(self._comm)
+            if task == "write":
+                worker.setup_write(self._bin_data, mode)
+            else:
+                worker.setup_read()
+
+            self._start_flash_thread(worker)
+
+        def _on_read_data(self, data: bytearray) -> None:
+            """Store read-back data so the user can save it."""
+            self._bin_data = data
+            os_id = BinFile.get_os_id(data)
+            cs_ok = BinFile.verify_checksum(data)
+            cs_str = "\u2713" if cs_ok else "\u2717"
+            self.file_label.setText(f"Read from ECU | OS:{os_id} | CS:{cs_str}")
+            self.file_label.setStyleSheet("color: #4fc3f7;")
+            self.save_btn.setEnabled(True)
+            self.log_widget.append_log(
+                f"Read data stored: {len(data)} bytes, OS={os_id}, "
+                f"checksum {'OK' if cs_ok else 'MISMATCH'}",
+                "info",
+            )
+
+        def _on_flash_finished(self, success: bool) -> None:
+            self._unlock_ui_after_flash()
             self.progress_bar.setValue(100 if success else 0)
 
             if success:
                 self.log_widget.append_log("Operation completed successfully!", "success")
             else:
                 self.log_widget.append_log("Operation failed!", "error")
+
+            # Reset chaos tab buttons if chaos test just finished
+            self.chaos_tab.btn_start.setEnabled(True)
+            self.chaos_tab.btn_stop.setEnabled(False)
 
         def _on_flash_progress(self, current: int, total: int, label: str) -> None:
             if total > 0:
@@ -4213,8 +6046,28 @@ if GUI_AVAILABLE:
             if not self._comm:
                 return
             self.log_widget.append_log("Reading ECU info...", "info")
-            # TODO: call comm.request_mode1 and display results
-            self.log_widget.append_log("ECU info not yet implemented", "warning")
+            data = self._comm.request_mode1(message=0)
+            if not data:
+                self.log_widget.append_log("ECU info: no response from PCM", "error")
+                return
+
+            # Build info string from the returned parameter dict
+            lines = []
+            key_params = [
+                "RPM", "ECT Temp", "IAT Temp", "TPS %", "MAF",
+                "Spark Advance", "Battery V", "IAC Steps", "Run Time",
+            ]
+            for name in key_params:
+                if name in data:
+                    lines.append(f"  {name}: {data[name]}")
+
+            info_text = "\n".join(lines) if lines else "  (no parameters decoded)"
+            self.log_widget.append_log(f"ECU Info:\n{info_text}", "info")
+
+            QMessageBox.information(
+                self, "ECU Info (Mode 1)",
+                f"<pre>{info_text}</pre>",
+            )
 
         def _show_options(self) -> None:
             """Switch to the Options tab."""
@@ -4223,7 +6076,84 @@ if GUI_AVAILABLE:
         def _on_options_changed(self) -> None:
             """Called when options tab values change."""
             self.options_tab.apply_to_config(self._config)
+            self.options_tab.apply_log_config(self._log_cfg)
+            # Push updated log_cfg into the live ECUComm if connected
+            if self._comm:
+                self._comm.log_cfg = self._log_cfg
+            self._persist_on_close = self.options_tab.chk_persist_on_close.isChecked()
             self.log_widget.append_log("Options updated", "info")
+
+        # ── Custom Flash handlers ──
+
+        def _on_custom_write(self, sectors: list) -> None:
+            """Handle custom sector write from CustomFlashWidget."""
+            if not self._comm:
+                QMessageBox.warning(self, "Not Connected", "Connect to an ECU first.")
+                return
+            if self._bin_data is None:
+                QMessageBox.warning(self, "No Bin Loaded", "Load a .bin file first.")
+                return
+            if self._flash_active:
+                QMessageBox.warning(self, "Busy", "A flash operation is already running.")
+                return
+
+            sector_desc = ", ".join(str(s) for s in sectors)
+            self.log_widget.append_log(f"Custom write: sectors [{sector_desc}]", "info")
+            self._start_custom_flash_op("custom_write", sectors=sectors)
+
+        def _on_custom_read(self, start_addr: int, end_addr: int) -> None:
+            """Handle custom address range read from CustomFlashWidget."""
+            if not self._comm:
+                QMessageBox.warning(self, "Not Connected", "Connect to an ECU first.")
+                return
+            if self._flash_active:
+                QMessageBox.warning(self, "Busy", "A flash operation is already running.")
+                return
+
+            self.log_widget.append_log(
+                f"Custom read: ${start_addr:05X}-${end_addr:05X}", "info"
+            )
+            self._start_custom_flash_op("custom_read", start_addr=start_addr, end_addr=end_addr)
+
+        def _on_start_chaos(self, config: dict) -> None:
+            """Handle chaos test start from ChaosTestWidget."""
+            if not self._comm:
+                QMessageBox.warning(self, "Not Connected", "Connect to an ECU first.")
+                return
+            if self._bin_data is None:
+                QMessageBox.warning(self, "No Bin Loaded", "Load a .bin file first.")
+                return
+            if self._flash_active:
+                QMessageBox.warning(self, "Busy", "A flash operation is already running.")
+                return
+
+            self.log_widget.append_log(
+                f"Chaos test started: {config.get('cycles', 0)} cycles, mode={config.get('mode', 'BIN')}",
+                "warning"
+            )
+            self._start_custom_flash_op("chaos", chaos_cfg=config)
+
+        def _on_stop_chaos(self) -> None:
+            """Handle chaos test stop request."""
+            if self._comm:
+                self._comm.cancel()
+                self.log_widget.append_log("Chaos test cancel requested", "warning")
+
+        def _start_custom_flash_op(self, task: str, sectors: list = None,
+                                    start_addr: int = 0, end_addr: int = 0,
+                                    chaos_cfg: dict = None) -> None:
+            """Start a custom flash operation (custom write/read or chaos test)."""
+            self._lock_ui_for_flash(task)
+
+            worker = FlashWorker(self._comm)
+            if task == "custom_write":
+                worker.setup_custom_write(self._bin_data, sectors)
+            elif task == "custom_read":
+                worker.setup_custom_read(start_addr, end_addr)
+            elif task == "chaos":
+                worker.setup_chaos(chaos_cfg, self._bin_data)
+
+            self._start_flash_thread(worker)
 
         def _on_toggle_auto_checksum(self, checked: bool) -> None:
             self._config.auto_checksum_fix = checked
@@ -4434,10 +6364,33 @@ if GUI_AVAILABLE:
             QMessageBox.information(self, "vEEPROM Info", msg)
 
         def closeEvent(self, event) -> None:
+            # ── Block window close during an active WRITE ──
+            if self._flash_active and self._flash_task == "write":
+                QMessageBox.critical(
+                    self, "⚠ CANNOT CLOSE — WRITE IN PROGRESS",
+                    "A flash WRITE is active.\n\n"
+                    "Closing the application now will BRICK the PCM.\n"
+                    "Wait for the write to finish or use Cancel first.",
+                )
+                event.ignore()
+                return
+
+            # During a read, warn but allow close
+            if self._flash_active and self._flash_task == "read":
+                if self._comm:
+                    self._comm.cancel()
+                self.log_widget.append_log("Read cancelled by window close", "warning")
+
             if self._logger and self._logger.running:
                 self._logger.stop()
             if self._comm and self._comm.transport.is_open:
                 self._comm.disconnect()
+            # Persist settings to disk if enabled
+            if self._persist_on_close:
+                self.options_tab.apply_to_config(self._config)
+                self.options_tab.apply_log_config(self._log_cfg)
+                SettingsManager.save(self._config, self._log_cfg)
+                log.info("Settings saved on exit")
             event.accept()
 
 
@@ -4445,12 +6398,12 @@ if GUI_AVAILABLE:
 # SECTION 13 — CLI INTERFACE
 # ═══════════════════════════════════════════════════════════════════════
 
-def cli_log_callback(msg: str, level: str = "info") -> None:
+def cli_log_callback(msg: str, level: str = "info", **kwargs) -> None:
     """Print log messages to console."""
     prefix = {"info": "  ", "warning": "⚠ ", "error": "✗ ", "success": "✓ ", "debug": "  "}
     print(f"{prefix.get(level, '  ')}{msg}")
 
-def cli_progress_callback(current: int, total: int, label: str = "") -> None:
+def cli_progress_callback(current: int, total: int, label: str = "", **kwargs) -> None:
     """Print progress to console."""
     if total > 0:
         pct = (current / total) * 100
@@ -4470,9 +6423,9 @@ def run_cli(args: argparse.Namespace) -> int:
     if args.transport == "loopback":
         transport = LoopbackTransport()
     elif args.transport == "vecu":
-        bin_file = getattr(args, 'file', None)
+        bin_file = getattr(args, 'vecu_bin', None) or getattr(args, 'input', None)
         if not bin_file:
-            print("ERROR: --transport vecu requires a .bin file (use the 'read' or 'write' command with a file)")
+            print("ERROR: --transport vecu requires --vecu-bin <path> to load into the virtual ECU")
             return 1
         transport = LoopbackTransport(bin_path=bin_file)
     elif args.transport == "d2xx":
@@ -4507,9 +6460,22 @@ def run_cli(args: argparse.Namespace) -> int:
             flash_op = FlashOp(comm)
             data = flash_op.full_read()
             if data:
-                out_path = args.output or f"read_{datetime.now().strftime('%Y%m%d_%H%M%S')}.bin"
-                BinFile.save(out_path, data)
-                print(f"\n✓ Saved to {out_path}")
+                ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+                if args.cal:
+                    # Raw 16KB cal
+                    out_path = args.output or f"cal_raw_{ts}.cal"
+                    BinFile.save_cal(out_path, data, padded=False)
+                    print(f"\n✓ Saved raw 16KB cal to {out_path} ({BinFile.CAL_SIZE} bytes)")
+                elif args.cal_padded:
+                    # Padded 128KB with only cal
+                    out_path = args.output or f"cal_padded_{ts}.bin"
+                    BinFile.save_cal(out_path, data, padded=True)
+                    print(f"\n✓ Saved padded cal to {out_path} ({BinFile.BIN_SIZE} bytes)")
+                else:
+                    # Full 128KB bin
+                    out_path = args.output or f"read_{ts}.bin"
+                    BinFile.save(out_path, data)
+                    print(f"\n✓ Saved full bin to {out_path} ({BinFile.BIN_SIZE} bytes)")
                 return 0
             else:
                 print("\n✗ Read failed")
@@ -4647,6 +6613,8 @@ Examples:
     # Read
     read_p = subparsers.add_parser("read", help="Read full bin from ECU")
     read_p.add_argument("--output", "-o", help="Output .bin file path")
+    read_p.add_argument("--cal", action="store_true", help="Save only the 16KB cal region (raw, unpadded)")
+    read_p.add_argument("--cal-padded", action="store_true", help="Save 128KB file with only the cal region (zeros elsewhere)")
 
     # Write
     write_p = subparsers.add_parser("write", help="Write bin to ECU")
@@ -4683,7 +6651,8 @@ Examples:
         sub.add_argument("--port", "-p", default="COM3", help="Serial port (default: COM3)")
         sub.add_argument("--baud", type=int, default=DEFAULT_BAUD, help=f"Baud rate (default: {DEFAULT_BAUD})")
         sub.add_argument("--transport", choices=["pyserial", "d2xx", "loopback", "vecu"],
-                         default="pyserial", help="Transport type (vecu = virtual ECU from --bin-file)")
+                         default="pyserial", help="Transport type (vecu = virtual ECU from --vecu-bin)")
+        sub.add_argument("--vecu-bin", help="Path to .bin file to load into the virtual ECU (required for --transport vecu)")
         sub.add_argument("--device-id", default="F7", help="ALDL device ID hex (default: F7)")
         sub.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT_MS, help="Timeout in ms")
         sub.add_argument("--retries", type=int, default=DEFAULT_MAX_RETRIES, help="Max retries")

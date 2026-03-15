@@ -112,6 +112,8 @@ The PC does this remapping before sending each write frame. The kernel just writ
 
 After all sectors are written, the kernel computes a 16-bit checksum across all 3 banks and reports it back. The PC compares this against the expected checksum stored at file offsets $4006-$4007. If they don't match, the flash is corrupt.
 
+the way that a tl886 or t48 prom programmer, is to load a bin then flash it on after erasing whats on there from the aliexpress place you got it, some random firmware is usually on there that needs erase then check to see if empy, then write the new bin on there, then you can click verify and its tells you if its right. dont know how long this takes in time. over aldl i assume same as full bin read.
+
 ### What This Simulator Does
 
 This tool replicates Steps 2-6 using `virtual_128kb_eeprom.py` (the AMD29F010 class):
@@ -182,6 +184,8 @@ PC → ALDL Mode 6 (kernel upload) → ALDL Mode 16 (write data)
 Tested in a 20-minute session with multiple read/write cycles. The virtual EEPROM correctly
 handles sector erase, byte programming, bank switching, and NOR flash rules. Read-back after
 write matches the source bin exactly.
+## ram to rom now? 
+can this be reverse in the backwards order to what we just did.
 
 ---
 

@@ -491,6 +491,7 @@ HC11_REGISTERS: Dict[int, str] = {
     0x1000: "PORTA",  0x1001: "DDRA",   0x1002: "PORTG",  0x1003: "DDRG",
     0x1004: "PORTB",  0x1005: "PORTF",  0x1006: "PORTC",  0x1007: "DDRC",
     0x1008: "PORTD",  0x1009: "DDRD",   0x100A: "PORTE",
+    0x100B: "CFORC",  0x100C: "OC1M",   0x100D: "OC1D",
     0x100E: "TCNT",   0x1010: "TIC1",   0x1012: "TIC2",   0x1014: "TIC3",
     0x1016: "TOC1",   0x1018: "TOC2",   0x101A: "TOC3",   0x101C: "TOC4",
     0x101E: "TOC5",   0x1020: "TCTL1",  0x1021: "TCTL2",
@@ -501,16 +502,30 @@ HC11_REGISTERS: Dict[int, str] = {
     0x102E: "SCSR",   0x102F: "SCDR",
     0x1030: "ADCTL",  0x1031: "ADR1",   0x1032: "ADR2",
     0x1033: "ADR3",   0x1034: "ADR4",
-    0x103C: "INIT",   0x103D: "TEST1",  0x103F: "CONFIG",
+    0x1035: "BPROT",  0x1039: "OPTION", 0x103A: "COPRST",
+    0x103B: "PPROG",  0x103C: "HPRIO",  0x103D: "INIT",
+    0x103E: "TEST1",  0x103F: "CONFIG",
 }
 
 # Known RAM variable names (zero-page + extended)
 VY_RAM_LABELS: Dict[int, str] = {
+    0x0042: "ALDL_MODE",
+    0x0046: "MODE_FLAGS",
+    0x0047: "MODE_FLAGS_2",
+    0x0080: "ENGINE_STATUS",
+    0x0083: "COOLANT_TEMP",
+    0x0097: "SPARK_ADVANCE",
+    0x0098: "DWELL_TIME",
+    0x009D: "ENGINE_STATE",
+    0x009E: "GEAR_STATE",
     0x00A2: "RPM",
     0x00A3: "RPM_HIGH",
-    0x0080: "ENGINE_STATUS",
-    0x0199: "DWELL_RAM",
+    0x00B6: "MAP_VALUE",
+    0x00C4: "INJ_PW_H",
+    0x00C5: "INJ_PW_L",
+    0x00F3: "TPS_FILTERED",
     0x017B: "DWELL_INTERMED",
+    0x0199: "DWELL_RAM",
     0x194C: "CRANK_PERIOD_24X",
 }
 

@@ -4,15 +4,9 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pathlib import Path
 
-import importlib.util
-kcf_path = str(Path(__file__).parent / 'kingai_commie_flasher.py')
-spec = importlib.util.spec_from_file_location('kingai_commie_flasher', kcf_path)
-mod = importlib.util.module_from_spec(spec)
-mod.__file__ = kcf_path
-# Must register BEFORE exec so @dataclass can resolve __module__
-sys.modules['kingai_commie_flasher'] = mod
-sys.modules[spec.name] = mod
-spec.loader.exec_module(mod)
+# Add the project root (one level up from tests/) to sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import kingai_commie_flasher as mod
 
 LoopbackTransport = mod.LoopbackTransport
 ECUComm = mod.ECUComm
@@ -21,7 +15,7 @@ CommConfig = mod.CommConfig
 from tools.hc11_disassembler import HC11Disassembler
 
 # ── Load Enhanced bin as Virtual ECU ──
-bin_path = str(Path(__file__).parent / 'ignore' / 'VX-VY_V6_$060A_Enhanced_v1.0a.bin')
+bin_path = str(Path(__file__).resolve().parent.parent / 'ignore' / 'VX-VY_V6_$060A_Enhanced_v1.0a.bin')
 transport = LoopbackTransport(bin_path=bin_path)
 print(f"Virtual ECU loaded: {len(transport._simulated_bin)} bytes")
 rev_hi = transport._simulated_bin[0x77DE]
@@ -99,7 +93,7 @@ else:
 
 # ── Test 5: Compare STOCK vs ENHANCED ──
 print("\n=== TEST 5: STOCK vs ENHANCED comparison ===")
-stock_path = str(Path(__file__).parent / 'ignore' / '92118883_STOCK.bin')
+stock_path = str(Path(__file__).resolve().parent.parent / 'ignore' / '92118883_STOCK.bin')
 if Path(stock_path).exists():
     stock_transport = LoopbackTransport(bin_path=stock_path)
     s_hi = stock_transport._simulated_bin[0x77DE]

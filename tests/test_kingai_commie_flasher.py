@@ -536,7 +536,7 @@ class TestECUComm:
 
     def test_event_system(self, comm):
         log_messages = []
-        comm.on("log", lambda msg, level="info": log_messages.append(msg))
+        comm.on("log", lambda msg, level="info", **kwargs: log_messages.append(msg))
         comm.emit("log", msg="test message")
         assert len(log_messages) == 1
         assert log_messages[0] == "test message"
