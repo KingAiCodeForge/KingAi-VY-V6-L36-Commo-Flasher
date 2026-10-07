@@ -25,6 +25,7 @@ last_report.html
 
 # pytest cache
 .pytest_cache/
+.pytest-tmp-*/
 
 # ignore/ contains private research, real ECU bin files, old backups, PDFs
 # Do NOT commit bin files — they contain real ECU firmware
@@ -48,3 +49,12 @@ tests/_diff_exports.py
 
 # Empty archive dirs
 older_versions/
+
+# Hardware captures and owned firmware are not public source fixtures
+/_ai_work/
+/local/
+*.bin
+*.xdl
+.env
+.env.*
+!.env.example
