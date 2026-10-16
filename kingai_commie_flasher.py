@@ -52,17 +52,22 @@ Context:
     opcodes, wrong byte offsets, no separation of calibration vs code, and
     no auto-labelling from XDF definitions. I built my own.
 
-Flash Chip Compatibility:
-    The flash kernel and erase/write/verify routines are not AMD-specific.
-    All 128KB × 8-bit NOR flash chips used in these ECUs share the same
-    JEDEC standard command protocol — same sector geometry (8 × 16KB),
-    same erase sequence (AA→5555, 55→2AAA, 80→5555, 30→sector), same
-    byte program sequence (AA→5555, 55→2AAA, A0→5555, data→addr). The
-    seed/key security handshake is ECU-level, not chip-level.
-    Confirmed compatible:
-        AMD Am29F010      (0x01, 0x20) — original factory part
-        AMD Am29F040      (0x01, 0xA4) — 512KB variant, same command set
-        CAT/OnSemi 28F010 (0x31, 0xB4) — Intel-command compatible
+Flash Chip Compatibility (research-only; no hardware writes validated):
+    The intended exact target is the AMD Am29F010 (ID 0x01/0x20),
+    128 KiB with 8 x 16 KiB sectors. Even this chip is not yet qualified
+    by physical testing. A detected chip identifier does NOT establish that
+    the current kernel supports its erase/program geometry or command set.
+
+    Do not generalise the AMD unlock/erase/program sequences to CAT28F010:
+    CAT28F010 (0x31/0xB4) uses Intel-style erase/program commands with
+    device-specific voltage/verify requirements. The 512 KiB Am29F040
+    also has a different capacity/geometry and is not qualified by an
+    Am29F010 virtual test.
+
+    CURRENT CODE GAP: full_write() logs flash ID but does not reject an
+    unknown or unsupported part before erase; it also proceeds if the
+    pre-erase backup is incomplete. These are blocking bugs, not supported
+    behaviours. Consult readme.md for the static audit; no vehicle flash.
 
 Related Projects:
     https://github.com/KingAiCodeForge/KingAi-VY-V6-L36-Commo-Flasher
@@ -466,7 +471,7 @@ SECTOR_SIZE = 0x4000             # 16KB flash sector boundary for write rollback
 # Flash chip IDs
 FLASH_AMD_29F010 = (0x01, 0x20)   # Manufacturer=AMD, Device=29F010
 FLASH_AMD_29F040 = (0x01, 0xA4)   # Manufacturer=AMD, Device=29F040
-FLASH_CAT_28F010 = (0x31, 0xB4)   # Manufacturer=OnSemi, Device=CAT28F010
+FLASH_CAT_28F010 = (0x31, 0xB4)   # Diagnostic ID only; Intel-style 28F010 writes NOT supported
 
 
 # ═══════════════════════════════════════════════════════════════════════
