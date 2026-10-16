@@ -15,10 +15,10 @@ run_second_launch_kingai_commie_flasher_gui.bat
 
 > **STATUS: VIRTUAL TESTING — NOT YET TESTED ON REAL HARDWARE**
 >
-> The flash protocol is implemented and matches the OSE Enhanced Flash Tool V1.5.1 algorithm exactly.
-> All code paths have been verified against the decompiled OSE source and tested with a Virtual ECU
-> (LoopbackTransport loaded with real 128KB bin files). The kernel bytecodes, bank switching, sector
-> erase sequences, and Mode 16 write framing are all confirmed correct in simulation.
+> The Python protocol implementation was compared with the OSE tool and exercised
+> through virtual/synthetic sessions. These tests do **not** prove physical flash
+> commands, board geometry, communication timing, backup integrity or recovery.
+> A passed virtual read/write test is **not** a supported vehicle-flashing result.
 >
 > **First successful virtual read/write session completed 2026-02-17** — 20-minute session with
 > multiple 128KB reads and writes through the full protocol stack (silence → unlock → kernel upload →
@@ -41,8 +41,9 @@ run_second_launch_kingai_commie_flasher_gui.bat
 > - Power stability during sector erase (~1 second per 16 KB sector)
 >
 > **This tool has not yet been connected to a physical ECU.**
-> Until real-hardware testing is complete, use at your own risk. Keep a bench programmer (T48/TL866)
-> as backup. If you flash before I do and want to report results, open an issue.
+> Do not use the current write paths on a physical ECU. Static code review found
+> safety blockers listed below; having a bench programmer is not a substitute
+> for preventing unsafe erase/write operations.
 
 In-car flash read/write tool for the **Holden VY Ecotec V6** (Delco 68HC11F1, OS `$060A`, part number `92118883`).
 
@@ -56,6 +57,44 @@ If anyone wants a `.bat` launcher or a `.exe` with all dependencies bundled, jus
 The tool now includes a built-in 68HC11 disassembler, datalogger, table editor, and virtual ECU for
 offline testing.
 
+## Blocking issues found in static source review (17 October 2026)
+
+The checks below describe the current committed code, **not fixes already
+implemented**. Until they are addressed, this project is a virtual/offline
+research tool only:
+
+1. **Flash chip identity is logged but not enforced.**
+   `FlashOp.full_write()` calls `read_flash_info()` and continues even if
+   identification fails or the chip is unknown. A destructive erase must
+   instead require an exact, independently verified supported chip/board
+   combination and abort on any mismatch.
+2. **Failed pre-erase backup is not fatal.** If a block cannot be read,
+   `full_write()` logs "Backup incomplete — proceeding without full
+   recovery data" and moves on to erase. This must become a mandatory
+   fail-closed pre-erase gate, with a verified saved recovery image.
+3. **A failed full-read block can become a zero-filled hole.**
+   `FlashOp.full_read()` increments the address after the retry limit while
+   leaving the preallocated zero buffer untouched, then may return a
+   nominally full-length BIN. This is **not** proof of a complete read.
+   Refuse normal BIN output if any block failed and distinguish partial
+   diagnostic captures from verified images.
+4. **Chip protocols are not interchangeable.** The AMD Am29F010 unlock,
+   program and sector-erase command sequences are different from the
+   CAT28F010 Intel-style 20h/40h command family, which also has device-
+   specific programming requirements. Recognising a CAT28F010 ID is not
+   support for erasing or writing it. The Am29F040 is also a different-size
+   part and needs independent address/sector compatibility proof.
+5. **Bench/recovery proof is still absent.** Require known-good exact-source
+   readback, stable power, sector geometry confirmation, watchdog/recovery
+   testing and a supported external recovery path before any physical write.
+
+Datasheet references for item 4:
+[AMD Am29F010 command definitions](https://www.alphacron.de/download/hardware/29F010.pdf);
+[Catalyst CAT28F010 command and erase descriptions](https://dtsheet.com/doc/276314/catalyst-cat28f010).
+
+The current source code remains unchanged functionally by this documentation
+review. No flash action, bus test or write qualification is claimed.
+
 ## Target Hardware
 
 | Detail | Value |
@@ -63,7 +102,7 @@ offline testing.
 | ECU | Delco/Delphi 68HC11F1 |
 | OS ID | `$060A` |
 | Part Number | `92118883` |
-| Flash Chip | AMD 29F010 — 128 KB NOR, 8 x 16 KB sectors |
+| Flash Chip | Target research image: AMD Am29F010 (0x01/0x20), 128 KB NOR; no hardware write qualification |
 | Protocol | ALDL 8192 baud half-duplex serial |
 | Device ID | `0xF7` (VX/VY) |
 
@@ -73,9 +112,13 @@ offline testing.
 
 - **Full BIN read** — reads the entire 128 KB flash via the uploaded HC11 kernel and dumps to a `.bin` file
 - **Sector-level progress** with bank switching across Bank 72 / 88 / 80
-- **Per-block retries** — each 64-byte block retried up to 3 times with bus flush before skipping (no silent zero-fill)
+- **Per-block retries** — blocks are retried, but exhausted retries currently skip an address and may return zero-filled gaps. **Do not trust a nominally complete BIN until this is fixed.**
 
 ### Write
+
+**Not hardware-qualified. The current code does not fail closed on unknown
+flash chips or incomplete pre-erase backups; no physical writes should be
+attempted until these gates and independent recovery are implemented.**
 
 - **BIN write** — erases sectors 0-6 (skips boot sector 7), writes 104 KB (`$2000`-`$1BFFF`)
 - **CAL-only write** — erases sector 1 only, writes 16 KB calibration area (`$4000`-`$7FFF`). The CAL is padded to 128 KB in the file (same as OSE does it)
