@@ -2648,7 +2648,9 @@ class FlashOp:
                 return None
 
             data = self.comm.read_ram(address, extended=True)
-            if data:
+            # A nonempty but truncated response is not a successful 64-byte read.
+            # Reject it like a missing response to avoid zero-filled backup gaps.
+            if data is not None and len(data) == min(read_block, read_end - address):
                 for i, b in enumerate(data):
                     if address + i < BinFile.BIN_SIZE:
                         bin_data[address + i] = b
@@ -2666,12 +2668,14 @@ class FlashOp:
                                   msg=f"Read failed at ${address:05X}, retry {block_retries}/{READ_BLOCK_MAX_RETRIES}",
                                   level="warning")
                 else:
-                    # Exhausted retries — skip this block
+                    # Exhausted retries must abort; returning a zero-filled
+                    # 128 KiB image would falsely certify missing flash bytes.
                     self.comm.emit("log",
-                                  msg=f"Read failed at ${address:05X} after {READ_BLOCK_MAX_RETRIES} retries — skipping",
+                                  msg=f"READ ABORTED at ${address:05X} after {READ_BLOCK_MAX_RETRIES} retries — incomplete image refused",
                                   level="error")
-                    block_retries = 0
-                    address += read_block  # Skip ahead
+                    self.comm.cleanup_and_reset()
+                    self.comm.enable_chatter()
+                    return None
 
         # Step 7: Cleanup
         self.comm.cleanup_and_reset()
@@ -2777,7 +2781,9 @@ class FlashOp:
             if (bank, erase_byte) in erase_map:
                 for addr in range(s_start, s_end + 1, 64):
                     chunk = self.comm.read_ram(addr, extended=True)
-                    if chunk:
+                    # Do not treat a short nonempty read as a complete backup.
+                    expected_chunk = min(64, s_end - addr + 1)
+                    if chunk is not None and len(chunk) >= expected_chunk:
                         for i, b in enumerate(chunk):
                             if addr + i <= s_end:
                                 self._backup_bin[addr + i] = b
@@ -2790,8 +2796,12 @@ class FlashOp:
             self.comm.emit("log", msg="Backup complete — recovery data stored in memory", level="info")
         else:
             self.comm.emit("log",
-                          msg="Backup incomplete — proceeding without full recovery data",
-                          level="warning")
+                          msg="Backup incomplete — REFUSING ERASE before any write",
+                          level="error")
+            self._backup_bin = None
+            self.comm.cleanup_and_reset()
+            self.comm.enable_chatter()
+            return False
 
         # Step 6: Erase
         if not self.comm.erase_sectors(erase_map):
@@ -2990,11 +3000,14 @@ class FlashOp:
 
         while address <= end_addr:
             if self.comm.cancelled:
+                self.comm.cleanup_and_reset()
                 self.comm.enable_chatter()
                 return None
 
             chunk = self.comm.read_ram(address, count=read_block, extended=True)
-            if chunk:
+            expected_chunk = min(read_block, end_addr - address + 1)
+            if chunk is not None and len(chunk) >= expected_chunk:
+                self._cread_retries = 0  # each new block gets its own retry budget
                 offset = address - start_addr
                 copy_len = min(len(chunk), end_addr - address + 1)
                 result[offset:offset + copy_len] = chunk[:copy_len]
@@ -3015,10 +3028,12 @@ class FlashOp:
                                   level="warning")
                 else:
                     self.comm.emit("log",
-                                  msg=f"Read failed at ${address:05X} after {READ_BLOCK_MAX_RETRIES} retries",
+                                  msg=f"CUSTOM READ ABORTED at ${address:05X} after {READ_BLOCK_MAX_RETRIES} retries — incomplete output refused",
                                   level="error")
                     self._cread_retries = 0
-                    address += read_block
+                    self.comm.cleanup_and_reset()
+                    self.comm.enable_chatter()
+                    return None
 
         # Step 6: Cleanup
         self.comm.cleanup_and_reset()
