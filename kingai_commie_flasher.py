@@ -2794,6 +2794,11 @@ class FlashOp:
         for sector_num, bank, erase_byte, s_start, s_end, label in SECTOR_INFO:
             if (bank, erase_byte) in erase_map:
                 for addr in range(s_start, s_end + 1, 64):
+                    # Honour cancellation before touching any additional
+                    # sector data; never proceed to erase after a cancel.
+                    if self.comm.cancelled:
+                        backup_ok = False
+                        break
                     chunk = self.comm.read_ram(addr, extended=True)
                     expected_bytes = min(64, s_end + 1 - addr)
                     if chunk is not None and len(chunk) == expected_bytes:
@@ -2803,10 +2808,13 @@ class FlashOp:
                         break
                 if not backup_ok:
                     break
+        # A cancel delivered with the final read must still stop erase.
+        if self.comm.cancelled:
+            backup_ok = False
         if not backup_ok:
             self.comm.emit(
                 "log",
-                msg="WRITE REFUSED: pre-erase backup read was incomplete; no sectors erased",
+                msg="WRITE REFUSED: pre-erase backup incomplete or cancelled; no sectors erased",
                 level="error",
             )
             self._backup_bin = None
