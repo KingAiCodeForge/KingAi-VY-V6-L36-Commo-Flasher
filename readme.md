@@ -59,25 +59,26 @@ offline testing.
 
 ## Blocking issues found in static source review (17 October 2026)
 
-The checks below describe the current committed code, **not fixes already
-implemented**. Until they are addressed, this project is a virtual/offline
-research tool only:
+This stacked **draft** branch adds source-level guards for items 1–3
+below. Their new regression tests still require execution against the full
+repository and they have **no hardware validation**. Other write-path, image
+identity and recovery risks remain; treat this as virtual/offline research.
 
-1. **Flash chip identity is logged but not enforced.**
-   `FlashOp.full_write()` calls `read_flash_info()` and continues even if
-   identification fails or the chip is unknown. A destructive erase must
-   instead require an exact, independently verified supported chip/board
-   combination and abort on any mismatch.
-2. **Failed pre-erase backup is not fatal.** If a block cannot be read,
-   `full_write()` logs "Backup incomplete — proceeding without full
-   recovery data" and moves on to erase. This must become a mandatory
-   fail-closed pre-erase gate, with a verified saved recovery image.
-3. **A failed full-read block can become a zero-filled hole.**
-   `FlashOp.full_read()` increments the address after the retry limit while
-   leaving the preallocated zero buffer untouched, then may return a
-   nominally full-length BIN. This is **not** proof of a complete read.
-   Refuse normal BIN output if any block failed and distinguish partial
-   diagnostic captures from verified images.
+1. **Exact flash-chip gate — draft implemented.**
+   `FlashOp.full_write()` now refuses an absent/truncated or unknown chip ID,
+   the Intel-style CAT28F010 and the differently sized Am29F040. Only the
+   exact `(0x01, 0x20)` Am29F010 ID can continue to the backup stage. This
+   is not proof the detected board is supported or safe to write.
+2. **Pre-erase backup completeness — draft implemented.**
+   A missing or short expected read now aborts before `erase_sectors()`;
+   incomplete RAM backup is discarded. **The accepted in-memory backup is
+   not yet a persisted, readback-verified recovery image**, and physical
+   recovery procedures remain unqualified.
+3. **Partial full-read rejection — draft implemented.**
+   Missing or truncated fixed-size reads are retried and then abort, returning
+   `None` rather than a full-length BIN with zero-filled holes.
+   Full-image identity checks, independent readback and physical tests
+   are still required.
 4. **Chip protocols are not interchangeable.** The AMD Am29F010 unlock,
    program and sector-erase command sequences are different from the
    CAT28F010 Intel-style 20h/40h command family, which also has device-
@@ -92,8 +93,9 @@ Datasheet references for item 4:
 [AMD Am29F010 command definitions](https://www.alphacron.de/download/hardware/29F010.pdf);
 [Catalyst CAT28F010 command and erase descriptions](https://dtsheet.com/doc/276314/catalyst-cat28f010).
 
-The current source code remains unchanged functionally by this documentation
-review. No flash action, bus test or write qualification is claimed.
+The parent documentation PR made no functional changes; this stacked draft
+adds the three guards described above. No serial transport, physical flash,
+bench bus test or write/recovery qualification is claimed.
 
 ## Target Hardware
 
@@ -112,13 +114,14 @@ review. No flash action, bus test or write qualification is claimed.
 
 - **Full BIN read** — reads the entire 128 KB flash via the uploaded HC11 kernel and dumps to a `.bin` file
 - **Sector-level progress** with bank switching across Bank 72 / 88 / 80
-- **Per-block retries** — blocks are retried, but exhausted retries currently skip an address and may return zero-filled gaps. **Do not trust a nominally complete BIN until this is fixed.**
+- **Per-block retries (draft guard)** — an exhausted or short read now aborts and returns no BIN instead of silently preserving zero-filled gaps. Native/full-image verification is still needed.
 
 ### Write
 
-**Not hardware-qualified. The current code does not fail closed on unknown
-flash chips or incomplete pre-erase backups; no physical writes should be
-attempted until these gates and independent recovery are implemented.**
+**Not hardware-qualified. This draft now refuses unknown chips and
+incomplete pre-erase reads; persistence of a verified recovery image,
+independent checksum/readback, hardware timing and physical recovery are
+still unproven. Do not use for physical flashing.**
 
 - **BIN write** — erases sectors 0-6 (skips boot sector 7), writes 104 KB (`$2000`-`$1BFFF`)
 - **CAL-only write** — erases sector 1 only, writes 16 KB calibration area (`$4000`-`$7FFF`). The CAL is padded to 128 KB in the file (same as OSE does it)
