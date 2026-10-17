@@ -2131,8 +2131,8 @@ class ECUComm:
             self.config.echo_byte_count = ALDLProtocol.wire_length(frame)
 
         resp = self._transact(frame, timeout_ms=MODE6_UPLOAD_TIMEOUT_MS)
-        if not resp:
-            self.emit("log", msg="No flash info response", level="error")
+        if resp is None or len(resp) < 5:
+            self.emit("log", msg="Missing or truncated flash identification response", level="error")
             return None
 
         manuf = resp[3]
@@ -2653,11 +2653,11 @@ class FlashOp:
                 return None
 
             data = self.comm.read_ram(address, extended=True)
-            if data:
-                for i, b in enumerate(data):
-                    if address + i < BinFile.BIN_SIZE:
-                        bin_data[address + i] = b
-                address += len(data)
+            # A partial reply is a failed fixed-size block, not valid data.
+            expected_bytes = min(read_block, read_end - address)
+            if data is not None and len(data) == expected_bytes:
+                bin_data[address:address + expected_bytes] = data
+                address += expected_bytes
                 reads_done += 1
                 block_retries = 0  # reset on success
                 self.comm.emit("progress", current=reads_done, total=total_reads, label="Reading")
@@ -2671,12 +2671,14 @@ class FlashOp:
                                   msg=f"Read failed at ${address:05X}, retry {block_retries}/{READ_BLOCK_MAX_RETRIES}",
                                   level="warning")
                 else:
-                    # Exhausted retries — skip this block
+                    # Never return a nominally complete BIN with zero-filled
+                    # gaps after exhausted retries or truncated responses.
                     self.comm.emit("log",
-                                  msg=f"Read failed at ${address:05X} after {READ_BLOCK_MAX_RETRIES} retries — skipping",
+                                  msg=f"Read aborted at ${address:05X} after {READ_BLOCK_MAX_RETRIES} invalid blocks",
                                   level="error")
-                    block_retries = 0
-                    address += read_block  # Skip ahead
+                    self.comm.cleanup_and_reset()
+                    self.comm.enable_chatter()
+                    return None
 
         # Step 7: Cleanup
         self.comm.cleanup_and_reset()
@@ -2770,8 +2772,19 @@ class FlashOp:
             self.comm.enable_chatter()
             return False
 
-        # Step 5: Read flash info
+        # Step 5: Exact chip allowlist before the first destructive command.
+        # Other detected parts have incompatible or unqualified geometry.
         flash_info = self.comm.read_flash_info()
+        if flash_info != FLASH_AMD_29F010:
+            self.comm.emit(
+                "log",
+                msg=f"WRITE REFUSED: unknown or unqualified flash chip {flash_info!r}; "
+                    "requires exact Am29F010 identification",
+                level="error",
+            )
+            self.comm.cleanup_and_reset()
+            self.comm.enable_chatter()
+            return False
 
         # Step 5b: Pre-write backup read (#6 fix)
         # Read sectors that will be erased so recovery is possible on failure.
@@ -2782,21 +2795,29 @@ class FlashOp:
             if (bank, erase_byte) in erase_map:
                 for addr in range(s_start, s_end + 1, 64):
                     chunk = self.comm.read_ram(addr, extended=True)
-                    if chunk:
-                        for i, b in enumerate(chunk):
-                            if addr + i <= s_end:
-                                self._backup_bin[addr + i] = b
+                    expected_bytes = min(64, s_end + 1 - addr)
+                    if chunk is not None and len(chunk) == expected_bytes:
+                        self._backup_bin[addr:addr + expected_bytes] = chunk
                     else:
                         backup_ok = False
                         break
                 if not backup_ok:
                     break
-        if backup_ok:
-            self.comm.emit("log", msg="Backup complete — recovery data stored in memory", level="info")
-        else:
-            self.comm.emit("log",
-                          msg="Backup incomplete — proceeding without full recovery data",
-                          level="warning")
+        if not backup_ok:
+            self.comm.emit(
+                "log",
+                msg="WRITE REFUSED: pre-erase backup read was incomplete; no sectors erased",
+                level="error",
+            )
+            self._backup_bin = None
+            self.comm.cleanup_and_reset()
+            self.comm.enable_chatter()
+            return False
+        self.comm.emit(
+            "log",
+            msg="Pre-erase reads complete (RAM-only; not a validated recovery image)",
+            level="info",
+        )
 
         # Step 6: Erase
         if not self.comm.erase_sectors(erase_map):
