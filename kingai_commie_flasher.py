@@ -2648,7 +2648,9 @@ class FlashOp:
                 return None
 
             data = self.comm.read_ram(address, extended=True)
-            if data:
+            # A full image cannot be trusted if a response is short/long.
+            # Reject malformed blocks rather than shifting subsequent offsets.
+            if data is not None and len(data) == read_block:
                 for i, b in enumerate(data):
                     if address + i < BinFile.BIN_SIZE:
                         bin_data[address + i] = b
@@ -2666,12 +2668,19 @@ class FlashOp:
                                   msg=f"Read failed at ${address:05X}, retry {block_retries}/{READ_BLOCK_MAX_RETRIES}",
                                   level="warning")
                 else:
-                    # Exhausted retries — skip this block
-                    self.comm.emit("log",
-                                  msg=f"Read failed at ${address:05X} after {READ_BLOCK_MAX_RETRIES} retries — skipping",
-                                  level="error")
-                    block_retries = 0
-                    address += read_block  # Skip ahead
+                    # Do not return a nominal 128KB image containing silently
+                    # zero-filled gaps after a failed Mode 2 read.
+                    got = "none" if data is None else str(len(data))
+                    self.comm.emit(
+                        "log",
+                        msg=(f"Full read ABORTED at ${address:05X}: expected "
+                             f"{read_block} bytes, got {got}, "
+                             f"after {READ_BLOCK_MAX_RETRIES} attempts"),
+                        level="error",
+                    )
+                    self.comm.cleanup_and_reset()
+                    self.comm.enable_chatter()
+                    return None
 
         # Step 7: Cleanup
         self.comm.cleanup_and_reset()
@@ -2765,8 +2774,19 @@ class FlashOp:
             self.comm.enable_chatter()
             return False
 
-        # Step 5: Read flash info
+        # Step 5: Enforce the exact 128KiB chip before any erase/write.
+        # Recognition is a necessary software gate, not bench qualification.
         flash_info = self.comm.read_flash_info()
+        if flash_info != FLASH_AMD_29F010:
+            self.comm.emit(
+                "log",
+                msg=(f"WRITE REFUSED: flash-chip ID {flash_info!r} is not "
+                     "the exact AMD Am29F010 target"),
+                level="error",
+            )
+            self.comm.cleanup_and_reset()
+            self.comm.enable_chatter()
+            return False
 
         # Step 5b: Pre-write backup read (#6 fix)
         # Read sectors that will be erased so recovery is possible on failure.
@@ -2776,22 +2796,37 @@ class FlashOp:
         for sector_num, bank, erase_byte, s_start, s_end, label in SECTOR_INFO:
             if (bank, erase_byte) in erase_map:
                 for addr in range(s_start, s_end + 1, 64):
-                    chunk = self.comm.read_ram(addr, extended=True)
-                    if chunk:
-                        for i, b in enumerate(chunk):
-                            if addr + i <= s_end:
-                                self._backup_bin[addr + i] = b
-                    else:
+                    if self.comm.cancelled:
                         backup_ok = False
                         break
+                    chunk = self.comm.read_ram(addr, extended=True)
+                    expected_size = min(64, s_end - addr + 1)
+                    if chunk is None or len(chunk) != expected_size:
+                        self.comm.emit(
+                            "log",
+                            msg=(f"Backup read failed/short at ${addr:05X}: "
+                                 f"expected {expected_size} bytes, got "
+                                 f"{'none' if chunk is None else len(chunk)}"),
+                            level="error",
+                        )
+                        backup_ok = False
+                        break
+                    self._backup_bin[addr:addr + expected_size] = chunk
                 if not backup_ok:
                     break
         if backup_ok:
             self.comm.emit("log", msg="Backup complete — recovery data stored in memory", level="info")
         else:
-            self.comm.emit("log",
-                          msg="Backup incomplete — proceeding without full recovery data",
-                          level="warning")
+            self.comm.emit(
+                "log",
+                msg="WRITE REFUSED: incomplete pre-erase backup; nothing erased",
+                level="error",
+            )
+            # Never retain a partial in-memory copy as a recovery candidate.
+            self._backup_bin = None
+            self.comm.cleanup_and_reset()
+            self.comm.enable_chatter()
+            return False
 
         # Step 6: Erase
         if not self.comm.erase_sectors(erase_map):
