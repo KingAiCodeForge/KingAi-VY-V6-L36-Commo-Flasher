@@ -621,7 +621,9 @@ class HC11Disassembler:
 
     def decode_one(self, data: bytes, offset: int = 0,
                    base_addr: int = 0) -> Optional[DisassembledInstruction]:
-        """Decode exactly one instruction at the given offset."""
+        """Decode exactly one instruction at a nonnegative byte offset."""
+        if type(offset) is not int or offset < 0:
+            raise ValueError("Instruction offset must be a nonnegative integer")
         if offset >= len(data):
             return None
 
