@@ -1067,8 +1067,13 @@ Examples:
     args = parser.parse_args()
     if args.baud <= 0 or not 1 <= args.port <= 65535:
         parser.error("--baud must be positive and --port must be 1..65535")
-    if args.bin and not Path(args.bin).is_file():
-        parser.error(f"input image not found: {args.bin}")
+    if args.bin:
+        try:
+            image_size = Path(args.bin).stat().st_size
+        except OSError as exc:
+            parser.error(f"input image unavailable: {exc}")
+        if not Path(args.bin).is_file() or image_size not in (16384, FLASH_SIZE):
+            parser.error(f"virtual ECU image must be 16384 or {FLASH_SIZE} bytes")
     if args.mode == "send":
         if not args.frame:
             parser.error("--frame is required for send mode")

@@ -485,13 +485,17 @@ Known VY V6 addresses:
         print(f"  Known: {KNOWN_ADDRESSES[address]}")
         print()
 
-    # Set up transport
-    if args.loopback:
-        print("  Transport: Loopback (Virtual ECU)")
-        transport = LoopbackALDL(bin_path=args.bin_file, device_id=device_id)
-    else:
-        print(f"  Transport: Serial ({args.port} @ {args.baud} baud)")
-        transport = ALDLSerial(args.port, args.baud, device_id)
+    # Resolve virtual input before attempting to open any transport.
+    try:
+        if args.loopback:
+            print("  Transport: Loopback (Virtual ECU)")
+            transport = LoopbackALDL(bin_path=args.bin_file, device_id=device_id)
+        else:
+            print(f"  Transport: Serial ({args.port} @ {args.baud} baud)")
+            transport = ALDLSerial(args.port, args.baud, device_id)
+    except (OSError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
 
     try:
         transport.open()

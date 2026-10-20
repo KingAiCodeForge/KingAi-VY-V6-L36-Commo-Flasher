@@ -41,7 +41,7 @@ dependencies does not qualify the underlying ECU operations.
 
 ## Executed checks
 
-- `python -m pytest tests/test_portability.py -q`: **16 passed** on Windows,
+- `python -m pytest tests/test_portability.py -q`: **17 passed** on Windows,
   Python 3.13. The successful run used a fresh explicit workspace `--basetemp`.
   It covers arbitrary working directories, spaces in paths, missing optional
   dependencies using `-S`, invalid arguments before connection, exclusive output,

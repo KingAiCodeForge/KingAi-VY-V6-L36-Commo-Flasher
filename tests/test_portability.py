@@ -90,6 +90,18 @@ def test_standalone_reader_rejects_missing_or_partial_virtual_input(tmp_path):
     assert partial.read_bytes() == b"evidence"
 
 
+def test_standalone_cli_image_errors_are_clear(tmp_path):
+    partial = tmp_path / "partial evidence.bin"
+    partial.write_bytes(b"evidence")
+    for path in (tmp_path / "missing image.bin", partial):
+        result = invoke(tmp_path, "tools/ALDL_read_RAM_commands.py", "--loopback",
+                        "--bin-file", path, "--address", "0x4000")
+        assert result.returncode == 1
+        assert "ERROR:" in result.stderr
+        assert "Traceback" not in result.stderr
+    assert partial.read_bytes() == b"evidence"
+
+
 def test_standalone_reader_refuses_malformed_responses():
     transport = reader.LoopbackALDL()
     valid = transport.transact(reader.build_mode2_read(0xF7, 0x4000))
@@ -127,7 +139,10 @@ def test_unwritable_runtime_directory_keeps_help_available(tmp_path):
 
 
 def test_virtual_server_invalid_cli_inputs_fail_before_starting(tmp_path):
+    partial = tmp_path / "partial image.bin"
+    partial.write_bytes(b"partial")
     for args in (("--port", "0"), ("--bin", "absent.bin"),
+                 ("--bin", str(partial)),
                  ("--mode", "send", "--frame", "wrong"),
                  ("--mode", "send", "--frame", "F7 01 02")):
         result = invoke(tmp_path, "tools/virtual_aldl_frame_sender_and_vecu.py", *args,
