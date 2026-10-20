@@ -2785,16 +2785,14 @@ class FlashOp:
             self.comm.enable_chatter()
             return False
 
-        # Step 5: Exact chip allowlist before the first destructive command.
-        # Other detected parts have incompatible or unqualified geometry.
+        # Step 5: No erase can occur without exact supported chip identity.
+        # An AMD command sequence must not be used on other flash parts.
         flash_info = self.comm.read_flash_info()
         if flash_info != FLASH_AMD_29F010:
-            self.comm.emit(
-                "log",
-                msg=f"WRITE REFUSED: unknown or unqualified flash chip {flash_info!r}; "
-                    "requires exact Am29F010 identification",
-                level="error",
-            )
+            self.comm.emit("log",
+                           msg="WRITE REFUSED: missing or unsupported flash-chip ID before erase",
+                           level="error")
+            self._backup_bin = None
             self.comm.cleanup_and_reset()
             self.comm.enable_chatter()
             return False
@@ -2807,38 +2805,39 @@ class FlashOp:
         for sector_num, bank, erase_byte, s_start, s_end, label in SECTOR_INFO:
             if (bank, erase_byte) in erase_map:
                 for addr in range(s_start, s_end + 1, 64):
-                    # Honour cancellation before touching any additional
-                    # sector data; never proceed to erase after a cancel.
                     if self.comm.cancelled:
                         backup_ok = False
                         break
                     chunk = self.comm.read_ram(addr, extended=True)
-                    expected_bytes = min(64, s_end + 1 - addr)
-                    if chunk is not None and len(chunk) == expected_bytes:
-                        self._backup_bin[addr:addr + expected_bytes] = chunk
+                    expected_chunk = min(64, s_end - addr + 1)
+                    # Exact-length responses only. Oversized frames could be
+                    # misframed or contain an unrelated controller response.
+                    if (not self.comm.cancelled and chunk is not None
+                            and len(chunk) == expected_chunk):
+                        self._backup_bin[addr:addr + expected_chunk] = chunk
                     else:
                         backup_ok = False
                         break
                 if not backup_ok:
                     break
-        # A cancel delivered with the final read must still stop erase.
-        if self.comm.cancelled:
-            backup_ok = False
-        if not backup_ok:
-            self.comm.emit(
-                "log",
-                msg="WRITE REFUSED: pre-erase backup incomplete or cancelled; no sectors erased",
-                level="error",
-            )
+        if not backup_ok or self.comm.cancelled:
+            self.comm.emit("log",
+                          msg="WRITE REFUSED: backup incomplete or cancelled before erase",
+                          level="error")
             self._backup_bin = None
             self.comm.cleanup_and_reset()
             self.comm.enable_chatter()
             return False
-        self.comm.emit(
-            "log",
-            msg="Pre-erase reads complete (RAM-only; not a validated recovery image)",
-            level="info",
-        )
+        self.comm.emit("log", msg="Backup complete in volatile memory only", level="info")
+        # Guard a cancellation raised during the final status callback too.
+        if self.comm.cancelled:
+            self.comm.emit("log",
+                           msg="WRITE REFUSED: cancellation after backup; no sectors erased",
+                           level="error")
+            self._backup_bin = None
+            self.comm.cleanup_and_reset()
+            self.comm.enable_chatter()
+            return False
 
         # Step 6: Erase
         if not self.comm.erase_sectors(erase_map):
@@ -3037,11 +3036,14 @@ class FlashOp:
 
         while address <= end_addr:
             if self.comm.cancelled:
+                self.comm.cleanup_and_reset()
                 self.comm.enable_chatter()
                 return None
 
             chunk = self.comm.read_ram(address, count=read_block, extended=True)
-            if chunk:
+            expected_chunk = min(read_block, end_addr - address + 1)
+            if chunk is not None and len(chunk) >= expected_chunk:
+                self._cread_retries = 0  # each new block gets its own retry budget
                 offset = address - start_addr
                 copy_len = min(len(chunk), end_addr - address + 1)
                 result[offset:offset + copy_len] = chunk[:copy_len]
@@ -3062,10 +3064,12 @@ class FlashOp:
                                   level="warning")
                 else:
                     self.comm.emit("log",
-                                  msg=f"Read failed at ${address:05X} after {READ_BLOCK_MAX_RETRIES} retries",
+                                  msg=f"CUSTOM READ ABORTED at ${address:05X} after {READ_BLOCK_MAX_RETRIES} retries — incomplete output refused",
                                   level="error")
                     self._cread_retries = 0
-                    address += read_block
+                    self.comm.cleanup_and_reset()
+                    self.comm.enable_chatter()
+                    return None
 
         # Step 6: Cleanup
         self.comm.cleanup_and_reset()
