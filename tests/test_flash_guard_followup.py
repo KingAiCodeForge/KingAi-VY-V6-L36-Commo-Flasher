@@ -41,7 +41,9 @@ def test_cancel_before_first_backup_read_prevents_erase(monkeypatch):
     comm.read_ram.assert_not_called()
     comm.erase_sectors.assert_not_called()
     comm.write_flash_data.assert_not_called()
-    comm.cleanup_and_reset.assert_called_once()
+    # Prestart cancellation now aborts before any programming session or reset.
+    comm.disable_chatter.assert_not_called()
+    comm.cleanup_and_reset.assert_not_called()
 
 
 def test_cancel_during_backup_prevents_erase(monkeypatch):
