@@ -2608,102 +2608,117 @@ class FlashOp:
             log.info(line)
 
     def full_read(self) -> Optional[bytearray]:
-        """Read the full 128KB bin from the ECU."""
+        """Return a BIN only after every requested byte and cleanup succeed.
+
+        Short, oversized and absent blocks are retried at the same address.
+        Incomplete reads return None, preserving the GUI/CLI failure contract;
+        unread bytes in the temporary buffer are never presented as a backup.
+        """
         self.comm.emit("log", msg="═══ FULL READ STARTED ═══", level="info")
         start_time = time.monotonic()
-
-        # Step 1: Silence bus
-        if not self.comm.disable_chatter():
-            return None
-
-        # Step 2: Unlock
-        if not self.comm.unlock_security():
-            self.comm.enable_chatter()
-            return None
-
-        # Step 3: Enter programming
-        if not self.comm.enter_programming():
-            self.comm.enable_chatter()
-            return None
-
-        # Step 4: Upload kernel
-        if not self.comm.upload_kernel():
-            self.comm.enable_chatter()
-            return None
-
-        # Step 5: Read flash info
-        flash_info = self.comm.read_flash_info()
-
-        # Step 6: Read all data
-        # The uploaded kernel handles bank switching internally based on the 3-byte
-        # address — we just read sequentially from $0000 to $1FFFF.
-        bin_data = bytearray(BinFile.BIN_SIZE)
-        read_start = 0x0000
-        read_end = BinFile.BIN_SIZE  # 0x20000
-        read_block = 64  # bytes per Mode 2 read
-        total_reads = (read_end - read_start) // read_block
+        read_end = BinFile.BIN_SIZE
+        read_block = 64
+        total_reads = (read_end + read_block - 1) // read_block
+        bin_data = bytearray(read_end)
+        address = 0
         reads_done = 0
-
-        address = read_start
-        block_retries = 0  # per-block retry counter (local — #4 fix)
-        while address < read_end:
+        attempts = 0
+        bus_silenced = False
+        programming_entered = False
+        completed = False
+        error = ""
+        self._stats = {"operation": "READ", "status": "IN_PROGRESS", "complete": False}
+        try:
             if self.comm.cancelled:
-                self.comm.cleanup_and_reset()
-                self.comm.enable_chatter()
-                return None
+                raise RuntimeError("Read cancelled")
+            if not self.comm.disable_chatter():
+                raise RuntimeError("Could not silence the bus")
+            bus_silenced = True
+            if not self.comm.unlock_security():
+                raise RuntimeError("Security unlock failed")
+            if not self.comm.enter_programming():
+                raise RuntimeError("Programming entry failed")
+            programming_entered = True
+            if not self.comm.upload_kernel():
+                raise RuntimeError("Read kernel upload failed")
+            self.comm.read_flash_info()
 
-            data = self.comm.read_ram(address, extended=True)
-            if data:
-                for i, b in enumerate(data):
-                    if address + i < BinFile.BIN_SIZE:
-                        bin_data[address + i] = b
-                address += len(data)
-                reads_done += 1
-                block_retries = 0  # reset on success
-                self.comm.emit("progress", current=reads_done, total=total_reads, label="Reading")
-            else:
-                block_retries += 1
-                if block_retries < READ_BLOCK_MAX_RETRIES:
-                    # Flush bus and retry the same block
+            while address < read_end:
+                expected = min(read_block, read_end - address)
+                for attempt in range(READ_BLOCK_MAX_RETRIES):
+                    if self.comm.cancelled:
+                        raise RuntimeError("Read cancelled")
+                    attempts += 1
+                    data = self.comm.read_ram(address, count=expected, extended=True)
+                    if isinstance(data, (bytes, bytearray)) and len(data) == expected:
+                        break
+                    if attempt + 1 == READ_BLOCK_MAX_RETRIES:
+                        raise RuntimeError(
+                            f"Missing or invalid {expected}-byte block at ${address:05X} "
+                            f"after {READ_BLOCK_MAX_RETRIES} attempts"
+                        )
                     self.comm.transport.flush_input()
+                    self.comm.emit(
+                        "log", msg=f"Invalid block at ${address:05X}; retrying the same address",
+                        level="warning",
+                    )
                     time.sleep(INTER_RETRY_DELAY_MS / 1000.0)
-                    self.comm.emit("log",
-                                  msg=f"Read failed at ${address:05X}, retry {block_retries}/{READ_BLOCK_MAX_RETRIES}",
-                                  level="warning")
                 else:
-                    # Exhausted retries — skip this block
-                    self.comm.emit("log",
-                                  msg=f"Read failed at ${address:05X} after {READ_BLOCK_MAX_RETRIES} retries — skipping",
-                                  level="error")
-                    block_retries = 0
-                    address += read_block  # Skip ahead
-
-        # Step 7: Cleanup
-        self.comm.cleanup_and_reset()
-        self.comm.enable_chatter()
+                    raise RuntimeError("No block read attempts configured")
+                bin_data[address:address + expected] = data
+                address += expected
+                reads_done += 1
+                self.comm.emit("progress", current=reads_done, total=total_reads, label="Reading")
+            completed = address == read_end
+        except Exception as exc:
+            error = str(exc)
+        finally:
+            cleanup_errors = []
+            if programming_entered:
+                try:
+                    if self.comm.cleanup_and_reset() is False:
+                        cleanup_errors.append("cleanup/reset returned failure")
+                except Exception as exc:
+                    cleanup_errors.append(f"cleanup/reset failed: {exc}")
+            if bus_silenced:
+                try:
+                    if self.comm.enable_chatter() is False:
+                        cleanup_errors.append("bus restoration returned failure")
+                except Exception as exc:
+                    cleanup_errors.append(f"bus restoration failed: {exc}")
+            if cleanup_errors:
+                error = "; ".join(filter(None, [error, *cleanup_errors]))
+                completed = False
+            self._stats = {
+                "operation": "READ", "mode": "FULL",
+                "status": "COMPLETE" if completed else (
+                    "CANCELLED" if self.comm.cancelled else "INCOMPLETE"
+                ),
+                "complete": completed, "data_complete": address == read_end,
+                "bytes_requested": read_end, "bytes_transferred": address,
+                "missing_ranges": [[address, read_end]] if address < read_end else [],
+                "read_block_size": read_block, "total_frames": attempts,
+                "successful_frames": reads_done, "failed_frames": attempts - reads_done,
+                "error": error or ("" if completed else "Read interrupted"),
+            }
+        if not completed:
+            self.comm.emit("log", msg=f"READ INCOMPLETE: {self._stats['error']}; no BIN returned", level="error")
+            return None
 
         elapsed = time.monotonic() - start_time
-        failed_reads = total_reads - reads_done
-        bytes_read = BinFile.BIN_SIZE
+        bytes_read = address
         kbps = (bytes_read * 8 / 1000) / elapsed if elapsed > 0 else 0
         baud_efficiency = (kbps * 1000) / self.comm.config.baud * 100 if self.comm.config.baud else 0
 
         # ── Flash Session Summary ──
-        self._stats = {
-            "operation": "READ",
-            "mode": "FULL",
-            "bytes_transferred": bytes_read,
-            "read_block_size": read_block,
-            "total_frames": total_reads,
-            "successful_frames": reads_done,
-            "failed_frames": failed_reads,
+        self._stats.update({
             "baud_rate": self.comm.config.baud,
             "elapsed_seconds": round(elapsed, 2),
             "throughput_kbps": round(kbps, 2),
             "baud_efficiency_pct": round(baud_efficiency, 1),
             "transport": type(self.comm.transport).__name__,
             "high_speed": self.comm.config.high_speed_read,
-        }
+        })
         self._log_session_summary()
 
         self.comm.emit("log", msg=f"═══ READ COMPLETE ({elapsed:.1f}s) ═══", level="info")

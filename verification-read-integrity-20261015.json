@@ -1,0 +1,26 @@
+{
+  "schema": "kingai.flasher-read-integrity-verification.v1",
+  "date_adelaide": "2026-10-15",
+  "parent_commit": "9abaedc",
+  "scope": "FlashOp.full_read and existing non-GUI core tests with simulated communication",
+  "tests": {
+    "command": "python -m pytest -q tests/test_full_read_integrity.py tests/test_kingai_commie_flasher.py",
+    "passed": 136
+  },
+  "behavior": [
+    "incomplete reads return None",
+    "exact block lengths required",
+    "failed blocks retried at the same address",
+    "cleanup and restoration failures cannot announce successful reads",
+    "missing ranges and actual received-byte counts reported"
+  ],
+  "not_qualified": [
+    "physical ECU access",
+    "actual kernel bank mapping",
+    "response origin matching",
+    "live-tuning write interlocks",
+    "GUI execution"
+  ],
+  "hardware_connected": false,
+  "github_actions_run": false
+}
