@@ -74,8 +74,8 @@ except ImportError:
     FLASH_SIM_AVAILABLE = False
 
 # ── Logging Setup (merged from log_setup.py — same pattern as kingai_commie_flasher.py) ──
-LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
-LOG_DIR.mkdir(parents=True, exist_ok=True)
+from kingai_paths import data_directory
+LOG_DIR = data_directory() / "logs"
 
 try:
     from rich.logging import RichHandler
@@ -101,8 +101,6 @@ def setup_logging(
     Log files: ``<log_dir>/<name>_YYYYMMDD_HHMMSS.log``
     """
     log_dir = log_dir or LOG_DIR
-    log_dir.mkdir(parents=True, exist_ok=True)
-
     logger = logging.getLogger(name)
     if logger.handlers:
         return logger
@@ -115,10 +113,14 @@ def setup_logging(
         "%(asctime)s | %(levelname)-7s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    fh = logging.FileHandler(str(log_file), encoding="utf-8")
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(file_fmt)
-    logger.addHandler(fh)
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        fh = logging.FileHandler(str(log_file), encoding="utf-8")
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(file_fmt)
+        logger.addHandler(fh)
+    except OSError as exc:
+        print(f"WARNING: cannot write logs to {log_dir}: {exc}", file=sys.stderr)
 
     # ── Console handler: only important stuff (WARNING+ default) ──
     if rich_console and RICH_LOGGING_AVAILABLE:
@@ -236,7 +238,7 @@ def verify_frame(data: bytes) -> bool:
     if len(data) < 3:
         return False
     cs_pos = data[1] - 83
-    if cs_pos < 3 or cs_pos >= len(data):
+    if cs_pos < 3 or cs_pos != len(data) - 1:
         return False
     expected = compute_checksum(bytearray(data[:cs_pos]), cs_pos)
     return data[cs_pos] == expected
@@ -336,7 +338,7 @@ class VirtualECU:
 
         # Load bin into flash
         self._flash_data = bytearray(FLASH_SIZE)
-        if bin_path and Path(bin_path).exists():
+        if bin_path:
             with open(bin_path, 'rb') as f:
                 data = f.read()
             if len(data) == 16384:
@@ -347,8 +349,7 @@ class VirtualECU:
             elif len(data) == FLASH_SIZE:
                 self._flash_data = bytearray(data)
             else:
-                self._flash_data[:len(data)] = data
-                log.warning("Loaded %d bytes (expected %d)", len(data), FLASH_SIZE)
+                raise ValueError(f"virtual ECU image must be 16384 or {FLASH_SIZE} bytes; got {len(data)}")
 
             if self.flash_chip:
                 self.flash_chip.load_from_bytes(bytes(self._flash_data))
@@ -388,7 +389,7 @@ class VirtualECU:
         Process an incoming ALDL frame and return the response.
         Routes to the appropriate mode handler.
         """
-        if len(frame) < 3:
+        if not verify_frame(frame):
             return None
 
         self.stats['frames_rx'] += 1
@@ -465,7 +466,7 @@ class VirtualECU:
 
         elif submode == 0x02:
             # Key response — validate using seed/key algorithm
-            if len(frame) >= 6:
+            if len(frame) == 7:
                 rx_key = (frame[4] << 8) | frame[5]
                 expected_key = compute_seed_key(SEED_HI, SEED_LO)
 
@@ -481,10 +482,8 @@ class VirtualECU:
                     # Still ACK (real ECU sends NAK but for testing, ACK with error byte)
                     return self._make_ack(MODE13_SECURITY, bytes([0x02, 0x55]))
             else:
-                # Malformed — accept anyway for dev convenience
-                self.unlocked = True
-                log.warning("Security: short key frame, accepting anyway")
-                return self._make_ack(MODE13_SECURITY, bytes([0x02]))
+                log.warning("Security: refusing short key frame")
+                return None
 
         return None
 
@@ -575,18 +574,20 @@ class VirtualECU:
         (From ALDL_read_RAM_commands.py address parsing)
         """
         self.stats['mode2_reads'] += 1
-        if frame[1] == 0x59:
+        if frame[1] == 0x59 and len(frame) == 7:
             # Extended 3-byte addressing
             addr = (frame[3] << 16) | (frame[4] << 8) | frame[5]
-        else:
+        elif frame[1] == 0x58 and len(frame) == 6:
             # Standard 2-byte addressing
             addr = (frame[3] << 8) | frame[4]
+        else:
+            return None
 
         flash_data = self.flash
         end = min(addr + 64, FLASH_SIZE)
         block = flash_data[addr:end]
-        if len(block) < 64:
-            block = block + bytes(64 - len(block))
+        if len(block) != 64:
+            return None
 
         resp = bytearray(FRAME_SIZE)
         resp[0] = self.device_id
@@ -614,21 +615,19 @@ class VirtualECU:
         This mode is defined in kingai_commie_flasher.py (MODE3_READ_BYTES).
         """
         self.stats['mode3_reads'] += 1
-        if len(frame) < 6:
+        if len(frame) != 7:
             return None
 
         addr = (frame[3] << 8) | frame[4]
         count = frame[5]
-        if count == 0:
-            count = 1
-        if count > 128:
-            count = 128  # Limit to prevent oversized response
+        if not 1 <= count <= 128:
+            return None
 
         flash_data = self.flash
         end = min(addr + count, FLASH_SIZE)
         block = flash_data[addr:end]
-        if len(block) < count:
-            block = block + bytes(count - len(block))
+        if len(block) != count:
+            return None
 
         resp = bytearray(FRAME_SIZE)
         resp[0] = self.device_id
@@ -704,12 +703,13 @@ class VirtualECU:
         data_start = 5
         data_len = frame[1] - ALDL_LENGTH_OFFSET - 3  # subtract mode + 2 addr bytes
         if data_len < 1:
-            data_len = 1
+            return None
         data = frame[data_start:data_start + data_len]
 
         # Validate: cal writes should be within $4000-$7FFF
-        if addr < 0x4000 or addr > 0x7FFF:
-            log.warning("Mode 10 write to non-cal address $%04X (outside $4000-$7FFF)", addr)
+        if addr < 0x4000 or addr + len(data) > 0x8000:
+            log.warning("Refused Mode 10 write outside $4000-$7FFF")
+            return None
 
         # Write through flash simulator if available
         if self.flash_chip:
@@ -732,11 +732,15 @@ class VirtualECU:
         Writes through the AMD 29F010 flash simulator for realistic NOR behavior.
         Supports bank-aware addressing from kingai_commie_flasher.py BANK_WRITE_MAP.
         """
+        if len(frame) != 39:
+            return None
         self.stats['mode16_writes'] += 1
-        if len(frame) > 38:
+        if len(frame) == 39:
             # Extract 3-byte address + 32 bytes data
             addr = (frame[3] << 16) | (frame[4] << 8) | frame[5]
             data = frame[6:6 + 32]
+            if addr + len(data) > FLASH_SIZE:
+                return None
 
             if self.flash_chip:
                 # Write through flash simulator (enforces NOR AND semantics)
@@ -756,6 +760,8 @@ class VirtualECU:
 
     def erase_sector(self, sector: int) -> bool:
         """Erase a flash sector (for testing write sequences)."""
+        if not 0 <= sector < NUM_SECTORS:
+            return False
         if self.flash_chip:
             ok = self.flash_chip.erase_sector_by_index(sector)
             log.info("Sector %d erase: %s", sector, "OK" if ok else "FAILED")
@@ -1059,6 +1065,22 @@ Examples:
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Enable verbose debug logging")
     args = parser.parse_args()
+    if args.baud <= 0 or not 1 <= args.port <= 65535:
+        parser.error("--baud must be positive and --port must be 1..65535")
+    if args.bin and not Path(args.bin).is_file():
+        parser.error(f"input image not found: {args.bin}")
+    if args.mode == "send":
+        if not args.frame:
+            parser.error("--frame is required for send mode")
+        try:
+            frame_bytes = bytes.fromhex(args.frame.replace(',', ' ').replace('0x', ''))
+        except ValueError:
+            parser.error("--frame must contain hexadecimal bytes")
+        if not 3 <= len(frame_bytes) <= FRAME_SIZE:
+            parser.error("--frame must contain 3..201 bytes")
+        wire_length = frame_bytes[1] - 82
+        if wire_length < 4 or wire_length > FRAME_SIZE or len(frame_bytes) not in (wire_length - 1, wire_length):
+            parser.error("--frame length byte must match the supplied bytes, with optional checksum")
 
     # Reconfigure logger with user-requested console level
     global log

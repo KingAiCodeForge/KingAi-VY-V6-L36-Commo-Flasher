@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Temporary script to audit kernel block sizes."""
 import sys, os
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import just the FlashKernel
 # We need to handle potential import errors from PySide6
 import importlib
-spec = importlib.util.spec_from_file_location("kcf", os.path.join(os.path.dirname(__file__), "kingai_commie_flasher.py"))
+spec = importlib.util.spec_from_file_location("kcf", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "kingai_commie_flasher.py"))
 
 # Read the file and extract FlashKernel class manually
-with open(os.path.join(os.path.dirname(__file__), "kingai_commie_flasher.py"), "r", encoding="utf-8") as f:
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "kingai_commie_flasher.py"), "r", encoding="utf-8") as f:
     src = f.read()
 
 # Find and exec just the FlashKernel class

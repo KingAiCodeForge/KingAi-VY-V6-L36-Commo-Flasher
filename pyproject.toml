@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kingai-commie-flasher"
+version = "0.2.0a1"
+description = "Experimental VY V6 ECU protocol research and virtual ECU tools"
+readme = "readme.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{name = "Jason King"}]
+dependencies = []
+
+[project.optional-dependencies]
+serial = ["pyserial>=3.5"]
+gui = ["PySide6>=6.5"]
+ftdi = ["ftd2xx>=1.3"]
+console = ["rich>=13"]
+test = ["pytest>=8", "pytest-qt>=4"]
+
+[project.scripts]
+kingai-flasher = "kingai_commie_flasher:main"
+kingai-aldl-read = "tools.ALDL_read_RAM_commands:main"
+kingai-vecu = "tools.virtual_aldl_frame_sender_and_vecu:main"
+
+[tool.setuptools]
+py-modules = ["kingai_commie_flasher", "virtual_128kb_eeprom", "kingai_paths"]
+packages = ["tools"]
+include-package-data = false

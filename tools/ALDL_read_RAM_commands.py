@@ -36,6 +36,7 @@ import sys
 import time
 import argparse
 import struct
+import json
 from pathlib import Path
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -236,10 +237,11 @@ class LoopbackALDL:
     def __init__(self, bin_path: str | None = None, device_id: int = DEVICE_VX_VY):
         self.device_id = device_id
         self.flash = bytearray(131072)  # 128KB zeroed
-        if bin_path and Path(bin_path).exists():
-            with open(bin_path, 'rb') as f:
-                data = f.read()
-            self.flash[:len(data)] = data
+        if bin_path:
+            data = Path(bin_path).read_bytes()
+            if len(data) != len(self.flash):
+                raise ValueError(f"virtual ECU image must be exactly {len(self.flash)} bytes; got {len(data)}")
+            self.flash[:] = data
             print(f"  Loaded {len(data)} bytes from {bin_path}")
 
     def open(self):
@@ -255,7 +257,7 @@ class LoopbackALDL:
         if mode == MODE8_SILENCE or mode == MODE9_UNSILENCE:
             resp = bytearray([self.device_id, 0x56, mode])
             apply_checksum(resp)
-            return bytes(resp)
+            return bytes(resp[:resp[1] - 82])
 
         if mode == MODE2_READ_RAM:
             # Extract address
@@ -267,8 +269,8 @@ class LoopbackALDL:
             # Read 64 bytes from simulated flash
             end = min(addr + READ_BLOCK_SIZE, len(self.flash))
             block = self.flash[addr:end]
-            if len(block) < READ_BLOCK_SIZE:
-                block = block + bytes(READ_BLOCK_SIZE - len(block))
+            if len(block) != READ_BLOCK_SIZE:
+                return None
 
             resp = bytearray(FRAME_SIZE)
             resp[0] = self.device_id
@@ -276,7 +278,7 @@ class LoopbackALDL:
             resp[2] = MODE2_READ_RAM
             resp[3:3 + len(block)] = block
             apply_checksum(resp)
-            return bytes(resp)
+            return bytes(resp[:resp[1] - 82])
 
         return None
 
@@ -293,20 +295,14 @@ def read_ram(transport, address: int, extended: bool = False, device_id: int = D
     """
     frame = build_mode2_read(device_id, address, extended)
     resp = transport.transact(frame)
+    transport.last_read_response = bytes(resp) if resp is not None else b""
 
-    if resp is None:
+    if (resp is None or len(resp) != READ_BLOCK_SIZE + 4
+            or resp[0] != device_id or resp[2] != MODE2_READ_RAM
+            or resp[1] - ALDL_LENGTH_OFFSET - 1 != READ_BLOCK_SIZE
+            or not verify_checksum(resp)):
         return None
-
-    if resp[2] != MODE2_READ_RAM:
-        print(f"  Unexpected mode in response: 0x{resp[2]:02X}")
-        return None
-
-    # Extract data: starts at byte 3, length = resp[1] - 85 - 1
-    data_len = resp[1] - ALDL_LENGTH_OFFSET - 1
-    if data_len <= 0:
-        return None
-
-    return bytes(resp[3:3 + data_len])
+    return bytes(resp[3:-1])
 
 
 def read_range(transport, start: int, length: int, extended: bool = False,
@@ -323,7 +319,11 @@ def read_range(transport, start: int, length: int, extended: bool = False,
     Returns:
         bytearray of all read data, or None on failure
     """
+    if length <= 0 or start < 0 or start + ((length + 63) // 64) * 64 > 0x20000:
+        raise ValueError("read range must fit complete 64-byte blocks in the 128 KiB target")
     result = bytearray()
+    transport.partial_read = bytes()
+    transport.failed_read_address = None
     addr = start
     total_blocks = (length + READ_BLOCK_SIZE - 1) // READ_BLOCK_SIZE
 
@@ -332,6 +332,8 @@ def read_range(transport, start: int, length: int, extended: bool = False,
         data = read_ram(transport, addr, extended, device_id)
         if data is None:
             print(f"  Read failed at ${addr:04X} (block {i+1}/{total_blocks})")
+            transport.partial_read = bytes(result)
+            transport.failed_read_address = addr
             return None
 
         take = min(len(data), remaining)
@@ -456,8 +458,19 @@ Known VY V6 addresses:
     args = parser.parse_args()
 
     # Parse hex values
-    device_id = int(args.device_id, 16)
-    address = int(args.address, 16)
+    try:
+        device_id = int(args.device_id, 16)
+        address = int(args.address, 16)
+    except ValueError:
+        parser.error("--device-id and --address must be hexadecimal integers")
+    if not 0 <= device_id <= 255:
+        parser.error("--device-id must fit one byte")
+    if args.baud <= 0 or args.count <= 0 or address < 0 or address + ((args.count + 63) // 64) * 64 > 0x20000:
+        parser.error("baud/count must be positive and complete read blocks must fit the 128 KiB target")
+    if args.bin_file and not args.loopback:
+        parser.error("--bin-file requires --loopback")
+    if args.output and Path(args.output).exists():
+        parser.error(f"output already exists: {args.output}; choose a new path")
     extended = args.extended or address > 0xFFFF
 
     print(f"ALDL RAM Reader — Delco 68HC11 ($060A)")
@@ -480,9 +493,8 @@ Known VY V6 addresses:
         print(f"  Transport: Serial ({args.port} @ {args.baud} baud)")
         transport = ALDLSerial(args.port, args.baud, device_id)
 
-    transport.open()
-
     try:
+        transport.open()
         # Optionally silence the bus
         if args.silence and not args.loopback:
             print("  Silencing bus (Mode 8)...")
@@ -490,16 +502,25 @@ Known VY V6 addresses:
             time.sleep(0.1)
 
         # Read
-        if args.count <= READ_BLOCK_SIZE:
-            # Single block read
-            data = read_ram(transport, address, extended, device_id)
-        else:
-            # Multi-block read
-            data = read_range(transport, address, args.count, extended, device_id)
+        data = read_range(transport, address, args.count, extended, device_id)
 
         if data is None:
-            print("  ERROR: Read failed — no response from ECU")
-            sys.exit(1)
+            print("  ERROR: Read incomplete; no complete image was saved")
+            if args.output:
+                partial_path = Path(str(args.output) + ".partial")
+                metadata_path = Path(str(partial_path) + ".json")
+                with partial_path.open("xb") as stream:
+                    stream.write(transport.partial_read)
+                metadata = {
+                    "status": "incomplete", "start_address": address,
+                    "requested_count": args.count, "complete_bytes": len(transport.partial_read),
+                    "failed_address": transport.failed_read_address,
+                    "failed_response_hex": transport.last_read_response.hex(),
+                }
+                with metadata_path.open("x", encoding="utf-8") as stream:
+                    json.dump(metadata, stream, indent=2)
+                print(f"  Preserved partial evidence: {partial_path} and {metadata_path}")
+            return 1
 
         print(f"  Read {len(data)} bytes at ${address:05X}")
         print()
@@ -527,7 +548,7 @@ Known VY V6 addresses:
 
         # Save to file
         if args.output:
-            with open(args.output, 'wb') as f:
+            with open(args.output, 'xb') as f:
                 f.write(data)
             print(f"  Saved to {args.output}")
 
@@ -536,9 +557,15 @@ Known VY V6 addresses:
             print("  Re-enabling bus traffic (Mode 9)...")
             unsilence_bus(transport, device_id)
 
+    except (OSError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
     finally:
+        if args.silence and not args.loopback:
+            unsilence_bus(transport, device_id)
         transport.close()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

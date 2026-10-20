@@ -22,7 +22,7 @@ Tests every GUI class and action in kingai_commie_flasher.py Section 12:
                             new tab handlers, about dialog, close event
 
 Run:
-    cd A:\\kingai_commie_flasher
+    cd path/to/your/checkout
     pytest tests/test_gui_functions.py -v --html=tests/gui_report.html --self-contained-html
 """
 
