@@ -64,10 +64,11 @@ Flash Chip Compatibility (research-only; no hardware writes validated):
     also has a different capacity/geometry and is not qualified by an
     Am29F010 virtual test.
 
-    CURRENT CODE GAP: full_write() logs flash ID but does not reject an
-    unknown or unsupported part before erase; it also proceeds if the
-    pre-erase backup is incomplete. These are blocking bugs, not supported
-    behaviours. Consult readme.md for the static audit; no vehicle flash.
+    SOFTWARE GUARDS: exact chip identity, complete reads, bounded retries and
+    cancellation are enforced in the reconciled full-write path. Physical
+    programming and live tuning remain held. Sparse/partial diagnostic bytes
+    are not durable recovery. Embedded-kernel redistribution provenance remains
+    unresolved; consult readme.md and the current qualification report.
 
 Related Projects:
     https://github.com/KingAiCodeForge/KingAi-VY-V6-L36-Commo-Flasher
@@ -201,6 +202,7 @@ from enum import IntEnum, Enum, auto
 from typing import Optional, Callable, List, Tuple, Dict, Any
 from collections import deque
 from io import BytesIO
+from kingai_paths import data_directory, write_new_file
 
 # Serial — try pyserial first, fallback stub
 try:
@@ -214,7 +216,7 @@ except ImportError:
 try:
     import ftd2xx
     D2XX_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError):
     D2XX_AVAILABLE = False
 
 # GUI — PySide6 (optional, CLI works without it)
@@ -240,13 +242,13 @@ except Exception as _e:
     _GUI_IMPORT_ERROR = f"{type(_e).__name__}: {_e}"
 
 # ── Version & Metadata ──
-__version__ = "0.1.0"
+__version__ = "0.2.0a1"
 __app_name__ = "KingAI Commie Flasher"
 __target_ecm__ = "VY V6 $060A (92118883)"
 
 # ── Logging Setup (merged from log_setup.py) ──
-LOG_DIR = Path(__file__).resolve().parent / "logs"
-LOG_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR = data_directory()
+LOG_DIR = DATA_DIR / "logs"
 
 # Rich logging handler (optional — install `rich` for colored console output)
 try:
@@ -271,7 +273,7 @@ def setup_logging(
         level:         Root level (DEBUG captures everything to file).
         console_level: Level for console/terminal output (WARNING+ by
                        default so Rich panels/tables aren't cluttered).
-        log_dir:       Override log directory (default: logs/ next to this file).
+        log_dir:       Override log directory (default: logs/ in the user data directory).
         rich_console:  Use Rich handler for console if available.
 
     Returns:
@@ -280,8 +282,6 @@ def setup_logging(
     Log files: ``<log_dir>/<name>_YYYYMMDD_HHMMSS.log``
     """
     log_dir = log_dir or LOG_DIR
-    log_dir.mkdir(parents=True, exist_ok=True)
-
     logger = logging.getLogger(name)
     if logger.handlers:
         return logger
@@ -294,10 +294,14 @@ def setup_logging(
         "%(asctime)s | %(levelname)-7s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    fh = logging.FileHandler(str(log_file), encoding="utf-8")
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(file_fmt)
-    logger.addHandler(fh)
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        fh = logging.FileHandler(str(log_file), encoding="utf-8")
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(file_fmt)
+        logger.addHandler(fh)
+    except OSError as exc:
+        print(f"WARNING: cannot write logs to {log_dir}: {exc}", file=sys.stderr)
 
     # ── Console handler: only important stuff (WARNING+ default) ──
     if rich_console and RICH_LOGGING_AVAILABLE:
@@ -1204,7 +1208,7 @@ class LoopbackTransport(BaseTransport):
         self._write_bank_pcm_base: int = 0  # PCM base offset for current bank
 
         # Load the simulated flash image
-        if bin_path and Path(bin_path).exists():
+        if bin_path is not None:
             raw = Path(bin_path).read_bytes()
             if len(raw) == 16384:  # 16KB cal → pad to 128KB
                 padded = bytearray(b'\xFF' * 131072)
@@ -1213,8 +1217,7 @@ class LoopbackTransport(BaseTransport):
             elif len(raw) == 131072:
                 self._simulated_bin = bytearray(raw)
             else:
-                log.warning("Virtual ECU: unexpected bin size %d, using zeros", len(raw))
-                self._simulated_bin = bytearray(131072)
+                raise ValueError(f"Virtual ECU image must be 131072 or 16384 bytes, got {len(raw)}")
             log.info("Virtual ECU loaded %d KB from %s", len(self._simulated_bin) // 1024, bin_path)
         else:
             self._simulated_bin = bytearray(131072)  # 128KB zeros
@@ -1409,7 +1412,14 @@ class LoopbackTransport(BaseTransport):
                     self._write_bank_pcm_base = 0x10000
                 log.debug("vEEPROM: write bank set to 0x%02X (pcm_base=$%05X)",
                           self._active_write_bank, self._write_bank_pcm_base)
-            resp = bytearray([device_id, 0x57, 0x06, 0xAA])
+            if length_byte == 0xDE:
+                payload = bytes(FLASH_AMD_29F010) + bytes(8)
+            elif length_byte == 0x74:
+                payload = b'\xBB'
+            else:
+                payload = b'\xAA'
+            resp = bytearray([device_id, 0x56 + len(payload), 0x06])
+            resp.extend(payload)
             cs = (256 - sum(resp) % 256) & 0xFF
             resp.append(cs)
             self._rx_buffer.extend(resp)
@@ -1580,15 +1590,30 @@ class CommConfig:
     disable_bcm_chatter: bool = False   # Skip BCM silence — OFF by default (bench/virtual setups have no BCM)
     auto_checksum_fix: bool = True
 
+    def validate(self) -> None:
+        bounds = {"device_id": (0, 255), "bcm_device_id": (0, 255), "baud": (1, 10000000),
+            "timeout_ms": (1, 600000), "inter_frame_delay_ms": (0, 60000),
+            "max_retries": (1, 100), "write_chunk_size": (1, 128), "echo_byte_count": (0, 201)}
+        for name, (lower, upper) in bounds.items():
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or not lower <= value <= upper:
+                raise ValueError(f"{name} must be an integer between {lower} and {upper}")
+        for name in ("high_speed_read", "ignore_echo", "disable_bcm_chatter", "auto_checksum_fix"):
+            if type(getattr(self, name)) is not bool:
+                raise ValueError(f"{name} must be true or false")
+
+    def __post_init__(self):
+        self.validate()
+
 
 # ── Settings Persistence ──
 
-SETTINGS_FILE = Path(__file__).resolve().parent / "settings.json"
+SETTINGS_FILE = DATA_DIR / "settings.json"
 
 class SettingsManager:
     """Persist CommConfig + LogConfig to JSON.  Loads on startup, saves on change.
 
-    Settings stored next to the script as settings.json.  If the file doesn't
+    Settings stored in the user data directory as settings.json.  If the file doesn't
     exist or is corrupt, defaults are used silently.
     """
 
@@ -1601,6 +1626,7 @@ class SettingsManager:
             "logging": {k: v for k, v in log_cfg.__dict__.items()},
         }
         try:
+            path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_suffix(".tmp")
             tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
             tmp.replace(path)
@@ -1618,20 +1644,24 @@ class SettingsManager:
             if path.exists():
                 data = json.loads(path.read_text(encoding="utf-8"))
                 for k, v in data.get("comm", {}).items():
-                    if hasattr(comm, k):
+                    if k in {item.name for item in fields(CommConfig)}:
                         setattr(comm, k, v)
                 for k, v in data.get("logging", {}).items():
-                    if hasattr(log_cfg, k):
+                    if k in {item.name for item in fields(LogConfig)}:
+                        if type(v) is not bool:
+                            raise ValueError(f"Logging option {k} must be true or false")
                         setattr(log_cfg, k, v)
+                comm.validate()
                 log.debug("Settings loaded ← %s", path)
         except Exception as e:
             log.warning("Could not load settings (%s), using defaults", e)
+            comm, log_cfg = CommConfig(), LogConfig()
         return comm, log_cfg
 
 
 # ── Crash Recovery State ──
 
-RECOVERY_STATE_FILE = Path(__file__).resolve().parent / "flash_recovery_state.json"
+RECOVERY_STATE_FILE = DATA_DIR / "flash_recovery_state.json"
 
 @dataclass
 class RecoveryState:
@@ -1659,6 +1689,7 @@ class RecoveryState:
         path = path or RECOVERY_STATE_FILE
         self.timestamp = datetime.now().isoformat()
         try:
+            path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_suffix(".tmp")
             tmp.write_text(json.dumps(self.__dict__, indent=2), encoding="utf-8")
             tmp.replace(path)
@@ -1824,7 +1855,7 @@ class ECUComm:
 
         remaining_time = max(1, int((deadline - time.monotonic()) * 1000))
         body = self.transport.read(remaining, timeout_ms=remaining_time)
-        if len(body) < remaining:
+        if len(body) != remaining:
             log.warning("Incomplete frame: expected %d more bytes, got %d", remaining, len(body))
             return None
 
@@ -1872,7 +1903,7 @@ class ECUComm:
                     continue
 
                 resp = self._rx_frame(timeout_ms=timeout_ms)
-                if resp is not None:
+                if self._response_matches(resp, frame[0], frame[2]):
                     return resp
 
                 # ── Failed: resync bus before next attempt ──
@@ -1888,6 +1919,15 @@ class ECUComm:
         if self.log_cfg.log_timeouts:
             self.emit("log", msg=f"Transaction failed after {retries} retries", level="error")
         return None
+
+    @staticmethod
+    def _response_matches(resp, device_id, mode, payload_bytes=0) -> bool:
+        """Validate declared wire shape before indexing a padded receive buffer."""
+        if not isinstance(resp, (bytes, bytearray)) or len(resp) < 4:
+            return False
+        wire_length = resp[1] - 82
+        return (4 + payload_bytes <= wire_length <= len(resp)
+                and resp[0] == device_id and resp[2] == mode)
 
     def _wait_silence(self, wait_ms: int = None) -> bool:
         """Wait for bus silence before transmitting."""
@@ -2033,7 +2073,8 @@ class ECUComm:
         if self.config.ignore_echo:
             self.config.echo_byte_count = ALDLProtocol.wire_length(frame)
         resp = self._transact(frame, timeout_ms=3000)
-        if not resp:
+        if (not self._response_matches(resp, self.config.device_id, ALDLMode.MODE13_SECURITY, 3)
+                or resp[3] != 1):
             self.emit("log", msg="No seed response", level="error")
             return False
 
@@ -2061,7 +2102,8 @@ class ECUComm:
             self.emit("log", msg="No key response", level="error")
             return False
 
-        if len(resp) > 4 and resp[4] == 0xAA:
+        if (self._response_matches(resp, self.config.device_id, ALDLMode.MODE13_SECURITY, 2)
+                and resp[3] == 2 and resp[4] == 0xAA):
             self.state = CommState.UNLOCKED
             self.emit("state", state=self.state)
             self.emit("log", msg="Security unlocked!", level="info")
@@ -2078,7 +2120,7 @@ class ECUComm:
         if self.config.ignore_echo:
             self.config.echo_byte_count = ALDLProtocol.wire_length(frame)
         resp = self._transact(frame, timeout_ms=MODE5_TIMEOUT_MS)
-        if resp and len(resp) > 3 and resp[3] == 0xAA:
+        if self._response_matches(resp, self.config.device_id, ALDLMode.MODE5_ENTER_PROG, 1) and resp[3] == 0xAA:
             self.state = CommState.PROGRAMMING
             self.emit("state", state=self.state)
             self.emit("log", msg="Programming mode active", level="info")
@@ -2107,7 +2149,7 @@ class ECUComm:
                 self.config.echo_byte_count = ALDLProtocol.wire_length(frame)
 
             resp = self._transact(frame, timeout_ms=MODE6_UPLOAD_TIMEOUT_MS)
-            if not resp or resp[3] != 0xAA:
+            if not self._response_matches(resp, self.config.device_id, ALDLMode.MODE6_UPLOAD, 1) or resp[3] != 0xAA:
                 self.emit("log", msg=f"Kernel block {i} upload failed", level="error")
                 return False
 
@@ -2131,7 +2173,9 @@ class ECUComm:
             self.config.echo_byte_count = ALDLProtocol.wire_length(frame)
 
         resp = self._transact(frame, timeout_ms=MODE6_UPLOAD_TIMEOUT_MS)
-        if resp is None or len(resp) < 5:
+        if (resp is None or len(resp) < 6 or resp[0] != self.config.device_id
+                or resp[2] != ALDLMode.MODE6_UPLOAD or resp[1] - 86 < 2
+                or resp[1] - 82 > len(resp)):
             self.emit("log", msg="Missing or truncated flash identification response", level="error")
             return None
 
@@ -2171,7 +2215,7 @@ class ECUComm:
                 self.config.echo_byte_count = ALDLProtocol.wire_length(frame)
 
             resp = self._transact(frame, timeout_ms=ERASE_TIMEOUT_MS, retries=3)
-            if not resp or resp[3] != 0xAA:
+            if not self._response_matches(resp, self.config.device_id, ALDLMode.MODE6_UPLOAD, 1) or resp[3] != 0xAA:
                 result = resp[3] if resp and len(resp) > 3 else 0xFF
                 self.emit("log", msg=f"Erase sector {i+1} failed (result=0x{result:02X})", level="error")
                 return False
@@ -2195,6 +2239,15 @@ class ECUComm:
         flash bank is mapped there. OSE copies file data into a temp array at the
         windowed offset before writing; we achieve the same by subtracting pcm_base_offset.
         """
+        try:
+            self.config.validate()
+            if (not isinstance(bin_data, (bytes, bytearray)) or len(bin_data) != BinFile.BIN_SIZE
+                    or type(start_offset) is not int or type(end_offset) is not int
+                    or not 0 <= start_offset <= end_offset < len(bin_data)):
+                raise ValueError("Write requires a complete image and a valid bounded range")
+        except ValueError as exc:
+            self.emit("log", msg=f"WRITE REFUSED: {exc}", level="error")
+            return False
         self.state = CommState.FLASHING
         self.emit("state", state=self.state)
 
@@ -2224,7 +2277,7 @@ class ECUComm:
                 self.config.echo_byte_count = ALDLProtocol.wire_length(frame)
 
             resp = self._transact(frame, timeout_ms=MODE6_UPLOAD_TIMEOUT_MS)
-            if not resp or resp[3] != 0xAA:
+            if not self._response_matches(resp, self.config.device_id, ALDLMode.MODE6_UPLOAD, 1) or resp[3] != 0xAA:
                 self.emit("log", msg=f"Write bank setup failed for 0x{bank_byte:02X}", level="error")
                 return False
 
@@ -2254,7 +2307,7 @@ class ECUComm:
                     self.config.echo_byte_count = ALDLProtocol.wire_length(write_frame)
 
                 resp = self._transact(write_frame, timeout_ms=WRITE_FRAME_TIMEOUT_MS, retries=1)
-                if resp and len(resp) > 3 and resp[3] == 0xAA:
+                if self._response_matches(resp, self.config.device_id, ALDLMode.MODE16_FLASH_WRITE, 1) and resp[3] == 0xAA:
                     bytes_written += actual_chunk_size
                     retries = 0
 
@@ -2308,7 +2361,7 @@ class ECUComm:
             self.config.echo_byte_count = ALDLProtocol.wire_length(frame)
 
         resp = self._transact(frame, timeout_ms=CHECKSUM_TIMEOUT_MS)
-        if not resp:
+        if not self._response_matches(resp, self.config.device_id, ALDLMode.MODE6_UPLOAD, 1):
             self.emit("log", msg="No checksum response", level="error")
             return False
 
@@ -2342,6 +2395,9 @@ class ECUComm:
         resp = self._transact(frame, timeout_ms=5000)
         time.sleep(CLEANUP_DELAY_MS / 1000.0)
 
+        if not self._response_matches(resp, self.config.device_id, ALDLMode.MODE6_UPLOAD, 1) or resp[3] != 0xBB:
+            self.emit("log", msg="PCM reset unconfirmed: missing or invalid cleanup ACK", level="error")
+            return False
         self.state = CommState.CONNECTED
         self.emit("state", state=self.state)
         self.emit("log", msg="PCM reset complete", level="info")
@@ -2366,13 +2422,23 @@ class ECUComm:
         return ALDLProtocol.parse_mode1_response(data)
 
     def read_ram(self, address: int, count: int = 64, extended: bool = False) -> Optional[bytes]:
-        """Read RAM/ROM bytes via Mode 2."""
+        """Read a fixed Mode 2 wire block; callers validate its exact 64-byte size.
+
+        ``count`` is retained for API compatibility; Mode 2 has no count field.
+        It never authorizes padding or acceptance of a truncated response.
+        """
+        limit = 0xFFFFFF if extended else 0xFFFF
+        if type(address) is not int or not 0 <= address <= limit:
+            raise ValueError("Mode 2 address is outside the selected address width")
+        if type(count) is not int or not 1 <= count <= 64:
+            raise ValueError("Mode 2 count must be between 1 and 64")
         frame = ALDLProtocol.build_mode2_read(self.config.device_id, address, extended=extended)
         if self.config.ignore_echo:
             self.config.echo_byte_count = ALDLProtocol.wire_length(frame)
 
         resp = self._transact(frame, timeout_ms=2000)
-        if not resp:
+        if (not resp or len(resp) < 4 or resp[0] != self.config.device_id
+                or resp[2] != ALDLMode.MODE2_READ_RAM or resp[1] - 82 > len(resp)):
             return None
 
         # Data starts at byte 3
@@ -2415,8 +2481,10 @@ class BinFile:
 
     @staticmethod
     def save(path: str, data: bytearray) -> None:
-        """Save a .bin file."""
-        Path(path).write_bytes(bytes(data))
+        """Create a complete image without overwriting existing evidence."""
+        if len(data) != BinFile.BIN_SIZE:
+            raise ValueError(f"Complete BIN must contain exactly {BinFile.BIN_SIZE} bytes")
+        write_new_file(path, bytes(data))
 
     @staticmethod
     def save_cal(path: str, data: bytearray, padded: bool = True) -> None:
@@ -2429,18 +2497,20 @@ class BinFile:
             padded: If True, saves 128KB file with cal at $4000 and zeros elsewhere
                     (TunerPro-compatible). If False, saves raw 16KB cal data only.
         """
+        if len(data) != BinFile.BIN_SIZE:
+            raise ValueError(f"Calibration source must contain exactly {BinFile.BIN_SIZE} bytes")
         if padded:
             # 128KB file: zeros everywhere except $4000-$7FFF
             cal_out = bytearray(BinFile.BIN_SIZE)
             cal_out[BinFile.CAL_OFFSET:BinFile.CAL_OFFSET + BinFile.CAL_SIZE] = \
                 data[BinFile.CAL_OFFSET:BinFile.CAL_OFFSET + BinFile.CAL_SIZE]
-            Path(path).write_bytes(bytes(cal_out))
+            write_new_file(path, bytes(cal_out))
             log.info("Saved padded 128KB cal to %s (cal at $%04X-$%04X)",
                      path, BinFile.CAL_OFFSET, BinFile.CAL_OFFSET + BinFile.CAL_SIZE - 1)
         else:
             # Raw 16KB cal data only
             cal_data = data[BinFile.CAL_OFFSET:BinFile.CAL_OFFSET + BinFile.CAL_SIZE]
-            Path(path).write_bytes(bytes(cal_data))
+            write_new_file(path, bytes(cal_data))
             log.info("Saved raw 16KB cal to %s", path)
 
     @staticmethod
@@ -2544,7 +2614,10 @@ class FlashOp:
 
     def __init__(self, comm: ECUComm):
         self.comm = comm
-        self._backup_bin: Optional[bytearray] = None
+        self._backup_bin = None  # sparse volatile capture; not a complete recovery BIN
+        self._backup_evidence = []
+        self._partial_read = bytearray()
+        self._read_evidence = []
         self._stats: Dict[str, Any] = {}
 
     def _log_session_summary(self) -> None:
@@ -2607,302 +2680,338 @@ class FlashOp:
             self.comm.emit("log", msg=line, level="info")
             log.info(line)
 
-    def full_read(self) -> Optional[bytearray]:
-        """Return a BIN only after every requested byte and cleanup succeed.
+    class _BackupCapture:
+        """Sparse volatile evidence. Missing addresses cannot be read as zero bytes."""
 
-        Short, oversized and absent blocks are retried at the same address.
-        Incomplete reads return None, preserving the GUI/CLI failure contract;
-        unread bytes in the temporary buffer are never presented as a backup.
-        """
-        self.comm.emit("log", msg="═══ FULL READ STARTED ═══", level="info")
-        start_time = time.monotonic()
-        read_end = BinFile.BIN_SIZE
-        read_block = 64
-        total_reads = (read_end + read_block - 1) // read_block
-        bin_data = bytearray(read_end)
-        address = 0
-        reads_done = 0
-        attempts = 0
-        bus_silenced = False
-        programming_entered = False
+        def __init__(self, chunks):
+            self.chunks = tuple((address, bytes(data)) for address, data in chunks)
+
+        def __len__(self):
+            return sum(len(data) for _, data in self.chunks)
+
+        def __getitem__(self, address_range):
+            if not isinstance(address_range, slice) or address_range.step not in (None, 1):
+                raise TypeError("Use an explicit absolute address slice")
+            start, stop = address_range.start, address_range.stop
+            if not isinstance(start, int) or not isinstance(stop, int) or start > stop:
+                raise ValueError("A valid explicit address range is required")
+            result = bytearray()
+            cursor = start
+            for address, data in self.chunks:
+                if address <= cursor < address + len(data):
+                    count = min(stop - cursor, address + len(data) - cursor)
+                    result.extend(data[cursor - address:cursor - address + count])
+                    cursor += count
+                if cursor == stop:
+                    return result
+            raise ValueError("Requested range includes uncaptured bytes; no padding is permitted")
+
+    def _read_exact_range(self, start_addr: int, end_addr: int, mode: str):
+        """Read a bounded range, retaining actual response bytes as volatile evidence."""
+        self._partial_read = bytearray()
+        self._read_evidence = []
+        self._cread_retries = 0
+        self._stats = {"operation": "READ", "mode": mode, "complete": False,
+                       "status": "INCOMPLETE"}
+        if (type(start_addr) is not int or type(end_addr) is not int
+                or not 0 <= start_addr <= end_addr < BinFile.BIN_SIZE):
+            self._stats["error"] = "Address range must be within the 128 KiB image"
+            self.comm.emit("log", msg=self._stats["error"], level="error")
+            return None
+        read_end = end_addr + 1
+        address = start_addr
+        attempts = reads_done = 0
+        bus_attempted = programming_attempted = False
         completed = False
         error = ""
-        self._stats = {"operation": "READ", "status": "IN_PROGRESS", "complete": False}
         try:
-            if self.comm.cancelled:
-                raise RuntimeError("Read cancelled")
+            def check_cancelled():
+                if self.comm.cancelled:
+                    raise RuntimeError("Read cancelled")
+
+            check_cancelled()
+            bus_attempted = True
             if not self.comm.disable_chatter():
                 raise RuntimeError("Could not silence the bus")
-            bus_silenced = True
+            check_cancelled()
             if not self.comm.unlock_security():
                 raise RuntimeError("Security unlock failed")
+            check_cancelled()
+            programming_attempted = True
             if not self.comm.enter_programming():
                 raise RuntimeError("Programming entry failed")
-            programming_entered = True
+            check_cancelled()
             if not self.comm.upload_kernel():
                 raise RuntimeError("Read kernel upload failed")
-            self.comm.read_flash_info()
-
+            check_cancelled()
+            if mode == "FULL":
+                self.comm.read_flash_info()
+                check_cancelled()
             while address < read_end:
-                expected = min(read_block, read_end - address)
+                # A tail at the end of the image still needs one complete wire frame.
+                wire_address = min(address, max(0, BinFile.BIN_SIZE - 64))
+                wire_offset = address - wire_address
+                expected = min(64 - wire_offset, read_end - address)
                 for attempt in range(READ_BLOCK_MAX_RETRIES):
-                    if self.comm.cancelled:
-                        raise RuntimeError("Read cancelled")
+                    check_cancelled()
                     attempts += 1
-                    data = self.comm.read_ram(address, count=expected, extended=True)
-                    if isinstance(data, (bytes, bytearray)) and len(data) == expected:
+                    # Mode 2 is a fixed 64-byte wire response, even at a requested range tail.
+                    data = self.comm.read_ram(wire_address, count=64, extended=True)
+                    valid = isinstance(data, (bytes, bytearray)) and len(data) == 64
+                    self._read_evidence.append({"address": address, "wire_address": wire_address,
+                        "requested": expected, "wire_expected": 64,
+                        "data": bytes(data) if isinstance(data, (bytes, bytearray)) else None,
+                        "accepted": valid})
+                    if valid:
                         break
+                    check_cancelled()
                     if attempt + 1 == READ_BLOCK_MAX_RETRIES:
-                        raise RuntimeError(
-                            f"Missing or invalid {expected}-byte block at ${address:05X} "
-                            f"after {READ_BLOCK_MAX_RETRIES} attempts"
-                        )
+                        raise RuntimeError(f"Missing or invalid {expected}-byte block at "
+                                           f"${address:05X} after {READ_BLOCK_MAX_RETRIES} attempts")
                     self.comm.transport.flush_input()
-                    self.comm.emit(
-                        "log", msg=f"Invalid block at ${address:05X}; retrying the same address",
-                        level="warning",
-                    )
+                    self.comm.emit("log", msg=f"Invalid block at ${address:05X}; retrying the same address",
+                                   level="warning")
+                    check_cancelled()
                     time.sleep(INTER_RETRY_DELAY_MS / 1000.0)
                 else:
                     raise RuntimeError("No block read attempts configured")
-                bin_data[address:address + expected] = data
+                self._partial_read.extend(data[wire_offset:wire_offset + expected])
                 address += expected
                 reads_done += 1
-                self.comm.emit("progress", current=reads_done, total=total_reads, label="Reading")
-            completed = address == read_end
+                check_cancelled()
+                self.comm.emit("progress", current=reads_done,
+                               total=(read_end - start_addr + 63) // 64, label="Reading")
+                check_cancelled()
+            completed = True
         except Exception as exc:
             error = str(exc)
         finally:
             cleanup_errors = []
-            if programming_entered:
+            if programming_attempted:
                 try:
                     if self.comm.cleanup_and_reset() is False:
                         cleanup_errors.append("cleanup/reset returned failure")
                 except Exception as exc:
                     cleanup_errors.append(f"cleanup/reset failed: {exc}")
-            if bus_silenced:
+            if bus_attempted:
                 try:
                     if self.comm.enable_chatter() is False:
                         cleanup_errors.append("bus restoration returned failure")
                 except Exception as exc:
                     cleanup_errors.append(f"bus restoration failed: {exc}")
-            if cleanup_errors:
-                error = "; ".join(filter(None, [error, *cleanup_errors]))
+            if cleanup_errors or self.comm.cancelled:
                 completed = False
-            self._stats = {
-                "operation": "READ", "mode": "FULL",
-                "status": "COMPLETE" if completed else (
-                    "CANCELLED" if self.comm.cancelled else "INCOMPLETE"
-                ),
+                error = "; ".join(filter(None, [error, *cleanup_errors,
+                    "Read cancelled" if self.comm.cancelled else ""]))
+            self._stats = {"operation": "READ", "mode": mode,
+                "status": "COMPLETE" if completed else ("CANCELLED" if self.comm.cancelled else "INCOMPLETE"),
                 "complete": completed, "data_complete": address == read_end,
-                "bytes_requested": read_end, "bytes_transferred": address,
+                "start_address": start_addr,
+                "bytes_requested": read_end - start_addr, "bytes_transferred": address - start_addr,
                 "missing_ranges": [[address, read_end]] if address < read_end else [],
-                "read_block_size": read_block, "total_frames": attempts,
+                "read_block_size": 64, "total_frames": attempts,
                 "successful_frames": reads_done, "failed_frames": attempts - reads_done,
-                "error": error or ("" if completed else "Read interrupted"),
-            }
+                "error": error or ("" if completed else "Read interrupted")}
         if not completed:
             self.comm.emit("log", msg=f"READ INCOMPLETE: {self._stats['error']}; no BIN returned", level="error")
             return None
+        return bytearray(self._partial_read)
 
+    def save_read_evidence(self, directory: Path) -> Path:
+        """Persist actual bytes separately from complete BINs; never pad or overwrite.
+
+        These diagnostic captures are incomplete and cannot establish recovery.
+        A filesystem error leaves any files already written intact as evidence.
+        """
+        import hashlib
+        directory = Path(directory)
+        directory.parent.mkdir(parents=True, exist_ok=True)
+        directory.mkdir(exist_ok=False)
+        partial = bytes(self._partial_read)
+        write_new_file(directory / "accepted-prefix.partial", partial)
+        responses = []
+        for index, capture in enumerate(self._read_evidence):
+            entry = {key: value for key, value in capture.items() if key != "data"}
+            raw = capture.get("data")
+            if raw is not None:
+                name = f"response-{index:05d}.capture"
+                write_new_file(directory / name, raw)
+                entry.update(file=name, size=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+            responses.append(entry)
+        metadata = {"schema": "kingai.incomplete-read-evidence.v1", "diagnostic_only": True,
+            "recovery_qualified": False, "stats": self._stats,
+            "prefix": {"file": "accepted-prefix.partial", "size": len(partial),
+                "sha256": hashlib.sha256(partial).hexdigest()}, "responses": responses}
+        write_new_file(directory / "manifest.json", (json.dumps(metadata, indent=2) + "\n").encode())
+        return directory
+
+    def full_read(self) -> Optional[bytearray]:
+        """Return a complete BIN only; actual partial bytes remain in _partial_read."""
+        start_time = time.monotonic()
+        result = self._read_exact_range(0, BinFile.BIN_SIZE - 1, "FULL")
+        if result is None:
+            return None
         elapsed = time.monotonic() - start_time
-        bytes_read = address
-        kbps = (bytes_read * 8 / 1000) / elapsed if elapsed > 0 else 0
-        baud_efficiency = (kbps * 1000) / self.comm.config.baud * 100 if self.comm.config.baud else 0
-
-        # ── Flash Session Summary ──
-        self._stats.update({
-            "baud_rate": self.comm.config.baud,
-            "elapsed_seconds": round(elapsed, 2),
+        kbps = len(result) * 8 / 1000 / elapsed if elapsed > 0 else 0
+        self._stats.update({"baud_rate": self.comm.config.baud, "elapsed_seconds": round(elapsed, 2),
             "throughput_kbps": round(kbps, 2),
-            "baud_efficiency_pct": round(baud_efficiency, 1),
-            "transport": type(self.comm.transport).__name__,
-            "high_speed": self.comm.config.high_speed_read,
-        })
-        self._log_session_summary()
-
-        self.comm.emit("log", msg=f"═══ READ COMPLETE ({elapsed:.1f}s) ═══", level="info")
-        return bin_data
+            "baud_efficiency_pct": round(kbps * 1000 / self.comm.config.baud * 100, 1)
+                if self.comm.config.baud else 0,
+            "transport": type(self.comm.transport).__name__, "high_speed": self.comm.config.high_speed_read})
+        try:
+            self._log_session_summary()
+            if self.comm.cancelled:
+                self._stats.update(complete=False, status="CANCELLED", error="Read cancelled during final status")
+                return None
+            self.comm.emit("log", msg=f"READ COMPLETE ({elapsed:.1f}s)", level="info")
+        except Exception as exc:
+            self._stats.update(complete=False, status="INCOMPLETE", error=f"Final status failed: {exc}")
+            return None
+        if self.comm.cancelled:
+            self._stats.update(complete=False, status="CANCELLED", error="Read cancelled during completion callback")
+            return None
+        return result
 
     def full_write(self, bin_data: bytearray, mode: str = "BIN",
                    progress_callback: Callable = None) -> bool:
-        """
-        Write a bin to the ECU.
-        mode: "CAL" (cal only), "BIN" (OS+cal), "PROM" (full recovery)
-        """
-        if len(bin_data) != BinFile.BIN_SIZE:
-            self.comm.emit("log", msg=f"Invalid bin size: {len(bin_data)}", level="error")
+        """Experimental virtual/mock write path. Physical programming remains on HOLD."""
+        self._backup_bin = None
+        self._backup_evidence = []
+        self._stats = {"operation": "WRITE", "complete": False, "status": "REFUSED"}
+        if isinstance(self.comm.transport, BaseTransport) and type(self.comm.transport) is not LoopbackTransport:
+            self.comm.emit("log", msg="WRITE HOLD: physical programming lacks durable recovery and hardware qualification",
+                           level="error")
             return False
-
+        if not isinstance(bin_data, (bytes, bytearray)) or len(bin_data) != BinFile.BIN_SIZE:
+            self.comm.emit("log", msg="Invalid BIN: exactly 128 KiB of bytes is required", level="error")
+            return False
+        if not isinstance(mode, str) or mode.upper() not in WRITE_RANGES:
+            self.comm.emit("log", msg=f"Invalid write mode: {mode!r}", level="error")
+            return False
         mode = mode.upper()
-        if mode not in WRITE_RANGES:
-            self.comm.emit("log", msg=f"Invalid write mode: {mode}", level="error")
-            return False
-
-        start_offset, end_offset = WRITE_RANGES[mode]
-
-        # Select erase map
-        if mode == "CAL":
-            erase_map = ERASE_MAP_CAL
-        elif mode == "BIN":
-            erase_map = ERASE_MAP_BIN
-        else:
-            erase_map = ERASE_MAP_PROM
-
-        self.comm.emit("log", msg=f"═══ {mode} WRITE STARTED ═══", level="info")
-        self.comm.emit("log", msg=f"  Range: ${start_offset:05X}-${end_offset:05X} "
-                       f"({end_offset - start_offset + 1} bytes)", level="info")
-        self.comm.emit("log", msg=f"  Sectors to erase: {len(erase_map)}", level="info")
-        start_time = time.monotonic()
-
-        # Verify checksum in the bin
-        if not BinFile.verify_checksum(bin_data):
+        image = bytearray(bin_data)  # never change the caller's original BIN
+        if not BinFile.verify_checksum(image):
             if self.comm.config.auto_checksum_fix:
-                old_cs, new_cs = BinFile.fix_checksum(bin_data)
-                self.comm.emit("log",
-                              msg=f"Auto-fixed checksum: 0x{old_cs:04X} → 0x{new_cs:04X}",
-                              level="warning")
+                BinFile.fix_checksum(image)
             else:
-                self.comm.emit("log", msg="Checksum mismatch in bin file!", level="error")
+                self.comm.emit("log", msg="Checksum mismatch in BIN file", level="error")
                 return False
-
-        # Step 1: Silence
-        if not self.comm.disable_chatter():
-            return False
-
-        # Step 2: Unlock
-        if not self.comm.unlock_security():
-            self.comm.enable_chatter()
-            return False
-
-        # Step 3: Enter programming
-        if not self.comm.enter_programming():
-            self.comm.enable_chatter()
-            return False
-
-        # Step 4: Upload kernel
-        if not self.comm.upload_kernel():
-            self.comm.enable_chatter()
-            return False
-
-        # Step 5: No erase can occur without exact supported chip identity.
-        # An AMD command sequence must not be used on other flash parts.
-        flash_info = self.comm.read_flash_info()
-        if flash_info != FLASH_AMD_29F010:
-            self.comm.emit("log",
-                           msg="WRITE REFUSED: missing or unsupported flash-chip ID before erase",
-                           level="error")
-            self._backup_bin = None
-            self.comm.cleanup_and_reset()
-            self.comm.enable_chatter()
-            return False
-
-        # Step 5b: Pre-write backup read (#6 fix)
-        # Read sectors that will be erased so recovery is possible on failure.
-        self.comm.emit("log", msg="Backing up flash before erase...", level="info")
-        self._backup_bin = bytearray(BinFile.BIN_SIZE)
-        backup_ok = True
-        for sector_num, bank, erase_byte, s_start, s_end, label in SECTOR_INFO:
-            if (bank, erase_byte) in erase_map:
-                for addr in range(s_start, s_end + 1, 64):
-                    if self.comm.cancelled:
-                        backup_ok = False
-                        break
-                    chunk = self.comm.read_ram(addr, extended=True)
-                    expected_chunk = min(64, s_end - addr + 1)
-                    # Exact-length responses only. Oversized frames could be
-                    # misframed or contain an unrelated controller response.
-                    if (not self.comm.cancelled and chunk is not None
-                            and len(chunk) == expected_chunk):
-                        self._backup_bin[addr:addr + expected_chunk] = chunk
-                    else:
-                        backup_ok = False
-                        break
-                if not backup_ok:
-                    break
-        if not backup_ok or self.comm.cancelled:
-            self.comm.emit("log",
-                          msg="WRITE REFUSED: backup incomplete or cancelled before erase",
-                          level="error")
-            self._backup_bin = None
-            self.comm.cleanup_and_reset()
-            self.comm.enable_chatter()
-            return False
-        self.comm.emit("log", msg="Backup complete in volatile memory only", level="info")
-        # Guard a cancellation raised during the final status callback too.
-        if self.comm.cancelled:
-            self.comm.emit("log",
-                           msg="WRITE REFUSED: cancellation after backup; no sectors erased",
-                           level="error")
-            self._backup_bin = None
-            self.comm.cleanup_and_reset()
-            self.comm.enable_chatter()
-            return False
-
-        # Step 6: Erase
-        if not self.comm.erase_sectors(erase_map):
-            self.comm.emit("log", msg="ERASE FAILED — PCM may be in erased state!", level="error")
-            self.comm.emit("log", msg="WARNING: ECU flash is erased. Retry write or ECU is bricked!", level="error")
-            self.comm.enable_chatter()
-            return False
-
-        # Step 7: Write (with full-operation retry on failure — erased ECU is bricked)
+        start_offset, end_offset = WRITE_RANGES[mode]
+        erase_map = {"CAL": ERASE_MAP_CAL, "BIN": ERASE_MAP_BIN, "PROM": ERASE_MAP_PROM}[mode]
+        bus_attempted = programming_attempted = erase_attempted = False
+        success = False
+        backup_complete = False
+        chunks = []
+        error = ""
         write_attempts = 0
-        max_write_attempts = 3
-        write_ok = False
-        while not write_ok and write_attempts < max_write_attempts:
-            write_ok = self.comm.write_flash_data(bin_data, start_offset, end_offset,
-                                                  callback=progress_callback)
-            if not write_ok:
-                write_attempts += 1
-                self.comm.emit("log",
-                              msg=f"WRITE FAILED (attempt {write_attempts}/{max_write_attempts}) "
-                                  f"— retrying to prevent bricked ECU",
-                              level="error")
-                if write_attempts >= max_write_attempts:
-                    self.comm.emit("log",
-                                  msg="WRITE FAILED after all retries. ECU may need bench recovery.",
-                                  level="error")
-                    self.comm.enable_chatter()
-                    return False
-
-        # Step 8: Verify
-        if not self.comm.verify_checksum(bin_data):
-            self.comm.emit("log", msg="VERIFY FAILED — checksum mismatch on PCM", level="error")
-            self.comm.enable_chatter()
+        started = time.monotonic()
+        try:
+            def check_cancelled():
+                if self.comm.cancelled:
+                    raise RuntimeError("Write cancelled")
+            check_cancelled()
+            bus_attempted = True
+            if not self.comm.disable_chatter():
+                raise RuntimeError("Could not silence the bus")
+            check_cancelled()
+            if not self.comm.unlock_security():
+                raise RuntimeError("Security unlock failed")
+            check_cancelled()
+            programming_attempted = True
+            if not self.comm.enter_programming():
+                raise RuntimeError("Programming entry failed")
+            check_cancelled()
+            if not self.comm.upload_kernel():
+                raise RuntimeError("Kernel upload failed")
+            check_cancelled()
+            if self.comm.read_flash_info() != FLASH_AMD_29F010:
+                raise RuntimeError("Missing or unsupported exact Am29F010 flash-chip ID")
+            check_cancelled()
+            self.comm.emit("log", msg="Backing up flash before erase...", level="info")
+            for _, bank, erase_byte, sector_start, sector_end, _ in SECTOR_INFO:
+                if (bank, erase_byte) not in erase_map:
+                    continue
+                for address in range(sector_start, sector_end + 1, 64):
+                    expected = min(64, sector_end - address + 1)
+                    for attempt in range(READ_BLOCK_MAX_RETRIES):
+                        check_cancelled()
+                        # Existing mock/backend interface defaults to 64-byte frames.
+                        data = self.comm.read_ram(address, extended=True)
+                        valid = isinstance(data, (bytes, bytearray)) and len(data) == expected
+                        self._backup_evidence.append({"address": address, "requested": expected,
+                            "data": bytes(data) if isinstance(data, (bytes, bytearray)) else None,
+                            "accepted": valid})
+                        if valid:
+                            chunks.append((address, bytes(data)))
+                            break
+                        check_cancelled()
+                        if attempt + 1 == READ_BLOCK_MAX_RETRIES:
+                            raise RuntimeError(f"Incomplete or invalid pre-erase backup at ${address:05X}")
+                        self.comm.transport.flush_input()
+                        time.sleep(INTER_RETRY_DELAY_MS / 1000.0)
+                    else:
+                        raise RuntimeError("No backup attempts configured")
+                    check_cancelled()
+            backup_complete = True
+            self._backup_bin = self._BackupCapture(chunks)
+            self.comm.emit("log", msg="Backup complete in volatile memory only", level="info")
+            check_cancelled()
+            erase_attempted = True
+            if not self.comm.erase_sectors(erase_map):
+                raise RuntimeError("Erase failed; state uncertain and recovery remains unqualified")
+            check_cancelled()
+            for write_attempts in range(3):
+                check_cancelled()
+                if self.comm.write_flash_data(image, start_offset, end_offset, callback=progress_callback):
+                    break
+                check_cancelled()
+            else:
+                raise RuntimeError("Write failed after bounded retries; recovery remains unqualified")
+            check_cancelled()
+            if not self.comm.verify_checksum(image):
+                raise RuntimeError("On-PCM checksum verification failed")
+            check_cancelled()
+            success = True
+        except Exception as exc:
+            error = str(exc)
+        finally:
+            cleanup_errors = []
+            if programming_attempted:
+                try:
+                    if self.comm.cleanup_and_reset() is False:
+                        cleanup_errors.append("cleanup/reset returned failure")
+                except Exception as exc:
+                    cleanup_errors.append(f"cleanup/reset failed: {exc}")
+            if bus_attempted:
+                try:
+                    if self.comm.enable_chatter() is False:
+                        cleanup_errors.append("bus restoration returned failure")
+                except Exception as exc:
+                    cleanup_errors.append(f"bus restoration failed: {exc}")
+            if cleanup_errors or self.comm.cancelled:
+                success = False
+                error = "; ".join(filter(None, [error, *cleanup_errors,
+                    "Write cancelled" if self.comm.cancelled else ""]))
+            if not erase_attempted and not success:
+                self._backup_bin = None
+            self._stats = {"operation": "WRITE", "mode": mode, "complete": success,
+                "status": "COMPLETE" if success else ("CANCELLED" if self.comm.cancelled else "FAILED"),
+                "erase_attempted": erase_attempted, "backup_complete": backup_complete,
+                "backup_bytes_captured": sum(len(data) for _, data in chunks),
+                "backup_ranges": [[address, address + len(data)] for address, data in chunks],
+                "error": error, "write_retries": write_attempts,
+                "bytes_transferred": end_offset - start_offset + 1 if success else 0,
+                "elapsed_seconds": round(time.monotonic() - started, 2), "checksum_verified": success}
+        try:
+            self.comm.emit("log", msg=("WRITE COMPLETE" if success else f"WRITE REFUSED/FAILED: {error}"),
+                           level="info" if success else "error")
+        except Exception as exc:
+            self._stats.update(complete=False, status="FAILED", error=f"Final status failed: {exc}")
             return False
-
-        # Step 9: Cleanup
-        self.comm.cleanup_and_reset()
-        self.comm.enable_chatter()
-
-        elapsed = time.monotonic() - start_time
-        bytes_written = end_offset - start_offset + 1
-        kbps = (bytes_written * 8 / 1000) / elapsed if elapsed > 0 else 0
-        baud_efficiency = (kbps * 1000) / self.comm.config.baud * 100 if self.comm.config.baud else 0
-        total_write_frames = (bytes_written + self.comm.config.write_chunk_size - 1) // self.comm.config.write_chunk_size
-
-        # ── Flash Session Summary ──
-        self._stats = {
-            "operation": "WRITE",
-            "mode": mode,
-            "bytes_transferred": bytes_written,
-            "write_chunk_size": self.comm.config.write_chunk_size,
-            "address_range": f"${start_offset:05X}-${end_offset:05X}",
-            "sectors_erased": len(erase_map),
-            "total_frames": total_write_frames,
-            "write_retries": write_attempts,
-            "baud_rate": self.comm.config.baud,
-            "elapsed_seconds": round(elapsed, 2),
-            "throughput_kbps": round(kbps, 2),
-            "baud_efficiency_pct": round(baud_efficiency, 1),
-            "transport": type(self.comm.transport).__name__,
-            "checksum_verified": True,
-        }
-        self._log_session_summary()
-
-        self.comm.emit("log", msg=f"═══ {mode} WRITE COMPLETE ({elapsed:.1f}s) ═══", level="info")
-        return True
+        if self.comm.cancelled:
+            self._stats.update(complete=False, status="CANCELLED")
+            return False
+        return success
 
     def custom_write(self, bin_data: bytearray, sectors: List[int],
                      progress_callback: Callable = None) -> bool:
@@ -2913,6 +3022,11 @@ class FlashOp:
         The method erases only the listed sectors and writes only their
         corresponding file-offset ranges.
         """
+        if type(self.comm.transport) is not LoopbackTransport:
+            self.comm.emit("log", msg="CUSTOM WRITE HOLD: chip, backup and recovery validation are incomplete; virtual transport only",
+                           level="error")
+            return False
+
         if len(bin_data) != BinFile.BIN_SIZE:
             self.comm.emit("log", msg=f"Invalid bin size: {len(bin_data)}", level="error")
             return False
@@ -2997,86 +3111,17 @@ class FlashOp:
         return True
 
     def custom_read(self, start_addr: int, end_addr: int) -> Optional[bytearray]:
-        """
-        Read a custom address range from the ECU.
-
-        Returns the bytes read, or None on failure.  The returned buffer
-        has length (end_addr - start_addr + 1).
-        """
-        byte_count = end_addr - start_addr + 1
-        self.comm.emit("log", msg=f"═══ CUSTOM READ ${start_addr:05X}-${end_addr:05X} "
-                       f"({byte_count:,} bytes) ═══", level="info")
-        start_time = time.monotonic()
-
-        # Step 1: Silence
-        if not self.comm.disable_chatter():
-            return None
-
-        # Step 2: Unlock
-        if not self.comm.unlock_security():
-            self.comm.enable_chatter()
-            return None
-
-        # Step 3: Enter programming
-        if not self.comm.enter_programming():
-            self.comm.enable_chatter()
-            return None
-
-        # Step 4: Upload kernel
-        if not self.comm.upload_kernel():
-            self.comm.enable_chatter()
-            return None
-
-        # Step 5: Read data
-        result = bytearray(byte_count)
-        read_block = 64
-        total_reads = (byte_count + read_block - 1) // read_block
-        reads_done = 0
-        address = start_addr
-
-        while address <= end_addr:
-            if self.comm.cancelled:
-                self.comm.cleanup_and_reset()
-                self.comm.enable_chatter()
+        """Read an exact bounded range without manufacturing absent bytes."""
+        result = self._read_exact_range(start_addr, end_addr, "CUSTOM")
+        if result is not None:
+            try:
+                self.comm.emit("log", msg="CUSTOM READ COMPLETE", level="info")
+            except Exception as exc:
+                self._stats.update(complete=False, status="INCOMPLETE", error=f"Final status failed: {exc}")
                 return None
-
-            chunk = self.comm.read_ram(address, count=read_block, extended=True)
-            expected_chunk = min(read_block, end_addr - address + 1)
-            if chunk is not None and len(chunk) >= expected_chunk:
-                self._cread_retries = 0  # each new block gets its own retry budget
-                offset = address - start_addr
-                copy_len = min(len(chunk), end_addr - address + 1)
-                result[offset:offset + copy_len] = chunk[:copy_len]
-                reads_done += 1
-                address += read_block
-
-                pct = (reads_done / total_reads) * 100 if total_reads > 0 else 100
-                self.comm.emit("progress", current=reads_done, total=total_reads,
-                              label=f"Reading ${address:05X}")
-            else:
-                retries = getattr(self, '_cread_retries', 0) + 1
-                self._cread_retries = retries
-                if retries < READ_BLOCK_MAX_RETRIES:
-                    self.comm.transport.flush_input()
-                    time.sleep(INTER_RETRY_DELAY_MS / 1000.0)
-                    self.comm.emit("log",
-                                  msg=f"Read failed at ${address:05X}, retry {retries}/{READ_BLOCK_MAX_RETRIES}",
-                                  level="warning")
-                else:
-                    self.comm.emit("log",
-                                  msg=f"CUSTOM READ ABORTED at ${address:05X} after {READ_BLOCK_MAX_RETRIES} retries — incomplete output refused",
-                                  level="error")
-                    self._cread_retries = 0
-                    self.comm.cleanup_and_reset()
-                    self.comm.enable_chatter()
-                    return None
-
-        # Step 6: Cleanup
-        self.comm.cleanup_and_reset()
-        self.comm.enable_chatter()
-
-        elapsed = time.monotonic() - start_time
-        self.comm.emit("log", msg=f"═══ CUSTOM READ COMPLETE ({elapsed:.1f}s) ═══", level="info")
+            if self.comm.cancelled:
+                self._stats.update(complete=False, status="CANCELLED", error="Read cancelled during completion callback")
+                return None
         return result
 
 
@@ -3118,7 +3163,7 @@ class DataLogger:
         self._csv_path = csv_path or str(
             LOG_DIR / f"datalog_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         )
-        self._csv_file = open(self._csv_path, "w", encoding="utf-8", buffering=1)  # line-buffered (#11 fix)
+        self._csv_file = open(self._csv_path, "x", encoding="utf-8", buffering=1)
         self._csv_file.write("Timestamp,Elapsed_s," + ",".join(self._params_to_log) + "\n")
 
         self.running = True
@@ -3146,26 +3191,35 @@ class DataLogger:
 
     def _log_loop(self) -> None:
         """Main logging loop — runs in background thread."""
-        while self.running and not self.comm.cancelled:
-            data = self.comm.request_mode1(message=0)
-            if data:
-                self._sample_count += 1
-                elapsed = time.monotonic() - self._start_time
-                ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        try:
+            while self.running and not self.comm.cancelled:
+                data = self.comm.request_mode1(message=0)
+                if data:
+                    self._sample_count += 1
+                    elapsed = time.monotonic() - self._start_time
+                    ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
-                # Write CSV row
-                values = [str(data.get(p, "")) for p in self._params_to_log]
-                if self._csv_file:
-                    self._csv_file.write(f"{ts},{elapsed:.3f}," + ",".join(values) + "\n")
-                    if self._sample_count % 10 == 0:
-                        self._csv_file.flush()
+                    # Write CSV row
+                    values = [str(data.get(p, "")) for p in self._params_to_log]
+                    if self._csv_file:
+                        self._csv_file.write(f"{ts},{elapsed:.3f}," + ",".join(values) + "\n")
+                        if self._sample_count % 10 == 0:
+                            self._csv_file.flush()
 
-                # Buffer and callback
-                self._data_buffer.append(data)
-                if self.on_data:
-                    self.on_data(data)
-            else:
-                time.sleep(0.05)
+                    # Buffer and callback
+                    self._data_buffer.append(data)
+                    if self.on_data:
+                        self.on_data(data)
+                else:
+                    time.sleep(0.05)
+        except Exception as exc:
+            log.exception("Datalog stopped after an error")
+            self.comm.emit("log", msg=f"Datalog stopped: {exc}", level="error")
+        finally:
+            self.running = False
+            if self._csv_file is not None:
+                self._csv_file.close()
+                self._csv_file = None
 
     @property
     def latest(self) -> Optional[Dict[str, float]]:
@@ -3214,6 +3268,10 @@ class LiveTuner:
 
     def set_cell(self, row: int, col: int, value: int) -> bool:
         """Set a cell value (with delta safety check)."""
+        if (self.table.element_size != 1 or type(row) is not int or type(col) is not int
+                or not 0 <= row < self.table.rows or not 0 <= col < self.table.cols
+                or type(value) is not int):
+            return False
         offset = row * self.table.cols + col
         if offset < 0 or offset >= self.table.byte_size:
             return False
@@ -3236,11 +3294,18 @@ class LiveTuner:
 
     def get_cell(self, row: int, col: int) -> int:
         """Get current shadow cell value."""
+        if (type(row) is not int or type(col) is not int
+                or not 0 <= row < self.table.rows or not 0 <= col < self.table.cols):
+            return 0
         offset = row * self.table.cols + col
         return self.shadow[offset] if 0 <= offset < self.table.byte_size else 0
 
     def send_updates(self) -> bool:
         """Send all dirty cells to ECU."""
+        if type(self.comm.transport) is not LoopbackTransport:
+            self.comm.emit("log", msg="LIVE TUNING HOLD: physical RAM writes are unqualified; virtual transport only",
+                           level="error")
+            return False
         if not self.dirty_cells:
             return True
 
@@ -3278,6 +3343,12 @@ class LiveTuner:
         knock = sensor_data.get("Knock Retard", 0)
         self.knock_history.append(knock)
 
+        import math
+        required = ("Knock Retard", "ECT Temp", "RPM")
+        if any(name not in sensor_data or isinstance(sensor_data[name], bool)
+               or not isinstance(sensor_data[name], (int, float))
+               or not math.isfinite(sensor_data[name]) for name in required):
+            return False
         # Knock retard watchdog: if >5° for 3 consecutive readings, revert
         if len(self.knock_history) >= 3:
             recent = list(self.knock_history)[-3:]
@@ -5023,10 +5094,6 @@ if GUI_AVAILABLE:
             self.comm.on("progress", lambda current, total, label="", **_: self.progress.emit(current, total, label))
             self.comm.on("state", lambda state, **_: self.state_changed.emit(state.name))
 
-            # Clear stale cancel flag so a previous cancel doesn't
-            # abort this operation immediately (bug #3: reset_cancel never called)
-            self.comm.reset_cancel()
-
             try:
                 if self._task == "write" and self._bin_data:
                     result = self._op.full_write(self._bin_data, self._mode)
@@ -5035,6 +5102,10 @@ if GUI_AVAILABLE:
                     data = self._op.full_read()
                     if data is not None:
                         self.read_data.emit(data)
+                    elif self._op._read_evidence:
+                        evidence = self._op.save_read_evidence(data_directory() / "read-captures" /
+                            (datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".incomplete"))
+                        self.log_message.emit(f"Incomplete diagnostic bytes preserved: {evidence}", "warning")
                     self.finished.emit(data is not None)
                 elif self._task == "custom_write" and self._bin_data:
                     result = self._op.custom_write(self._bin_data, self._sectors)
@@ -5042,7 +5113,18 @@ if GUI_AVAILABLE:
                 elif self._task == "custom_read":
                     data = self._op.custom_read(self._custom_start, self._custom_end)
                     if data is not None:
-                        self.read_data.emit(bytearray(data))
+                        directory = data_directory() / "read-captures"
+                        directory.mkdir(parents=True, exist_ok=True)
+                        output = directory / (datetime.now().strftime("range_%Y%m%d_%H%M%S_%f") + ".capture")
+                        write_new_file(output, bytes(data))
+                        write_new_file(Path(str(output) + ".json"), (json.dumps({"start_address": self._custom_start,
+                            "end_address_inclusive": self._custom_end, "bytes": len(data),
+                            "complete_image": False, "sha256": hashlib.sha256(data).hexdigest()}, indent=2) + "\n").encode())
+                        self.log_message.emit(f"Saved exact custom range ({len(data)} bytes): {output}", "info")
+                    elif self._op._read_evidence:
+                        evidence = self._op.save_read_evidence(data_directory() / "read-captures" /
+                            (datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".incomplete"))
+                        self.log_message.emit(f"Incomplete diagnostic bytes preserved: {evidence}", "warning")
                     self.finished.emit(data is not None)
                 elif self._task == "chaos" and self._bin_data:
                     result = self._run_chaos()
@@ -5134,7 +5216,7 @@ if GUI_AVAILABLE:
                 f"\n═══ CHAOS TEST COMPLETE — {cycle} cycles, {passed} passed, {failed} failed ═══",
                 "info" if failed == 0 else "warning"
             )
-            return failed == 0
+            return failed == 0 and passed > 0 and not self.comm.cancelled
 
     class MainWindow(QMainWindow):
         """Main application window."""
@@ -6009,6 +6091,7 @@ if GUI_AVAILABLE:
             self._flash_thread.start()
 
         def _start_flash_op(self, task: str, mode: str = "BIN") -> None:
+            self._comm.reset_cancel()
             self._lock_ui_for_flash(task)
 
             worker = FlashWorker(self._comm)
@@ -6021,6 +6104,9 @@ if GUI_AVAILABLE:
 
         def _on_read_data(self, data: bytearray) -> None:
             """Store read-back data so the user can save it."""
+            if len(data) != BinFile.BIN_SIZE:
+                self.log_widget.append_log("Refused range/partial data as a complete BIN", "error")
+                return
             self._bin_data = data
             os_id = BinFile.get_os_id(data)
             cs_ok = BinFile.verify_checksum(data)
@@ -6194,6 +6280,7 @@ if GUI_AVAILABLE:
                                     start_addr: int = 0, end_addr: int = 0,
                                     chaos_cfg: dict = None) -> None:
             """Start a custom flash operation (custom write/read or chaos test)."""
+            self._comm.reset_cancel()
             self._lock_ui_for_flash(task)
 
             worker = FlashWorker(self._comm)
@@ -6377,7 +6464,7 @@ if GUI_AVAILABLE:
                 return
             try:
                 flash_data = self._comm.transport.export_flash()
-                Path(path).write_bytes(flash_data)
+                write_new_file(path, bytes(flash_data))
                 self.log_widget.append_log(
                     f"vEEPROM: exported {len(flash_data)} bytes to {Path(path).name}", "success"
                 )
@@ -6470,6 +6557,24 @@ def run_cli(args: argparse.Namespace) -> int:
     print(f"\n{__app_name__} v{__version__}")
     print(f"Target: {__target_ecm__}\n")
 
+    if args.command == "checksum":
+        try:
+            bin_data = BinFile.load(args.input, allow_cal_padding=False)
+            stored = (bin_data[CHECKSUM_OFFSET_HI] << 8) | bin_data[CHECKSUM_OFFSET_LO]
+            computed = BinFile.compute_checksum(bin_data)
+            print(f"Stored: 0x{stored:04X}; computed: 0x{computed:04X}")
+            if args.fix:
+                BinFile.fix_checksum(bin_data)
+                write_new_file(args.output, bytes(bin_data))
+                print(f"Saved corrected copy: {args.output}")
+            return 0 if args.fix or stored == computed else 1
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+    if args.command == "ports":
+        print("\n".join(PySerialTransport.list_ports()) or "No serial ports found")
+        return 0
+
     # Create transport
     if args.transport == "loopback":
         transport = LoopbackTransport()
@@ -6525,11 +6630,15 @@ def run_cli(args: argparse.Namespace) -> int:
                 else:
                     # Full 128KB bin
                     out_path = args.output or f"read_{ts}.bin"
-                    BinFile.save(out_path, data)
+                    write_new_file(out_path, bytes(data))
                     print(f"\n✓ Saved full bin to {out_path} ({BinFile.BIN_SIZE} bytes)")
                 return 0
             else:
                 print("\n✗ Read failed")
+                if flash_op._read_evidence:
+                    base = args.output or f"read_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.bin"
+                    evidence = flash_op.save_read_evidence(Path(str(base) + ".incomplete"))
+                    print(f"Incomplete diagnostic bytes preserved: {evidence}")
                 return 1
 
         elif args.command == "write":
@@ -6604,7 +6713,7 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"  Status:   {'✓ MATCH' if stored == computed else '✗ MISMATCH'}")
             if stored != computed and args.fix:
                 BinFile.fix_checksum(bin_data)
-                BinFile.save(args.input, bin_data)
+                write_new_file(args.output, bytes(bin_data))
                 print(f"  Fixed:    0x{stored:04X} → 0x{computed:04X}")
             return 0
 
@@ -6689,7 +6798,8 @@ Examples:
     # Checksum
     cs_p = subparsers.add_parser("checksum", help="Verify or fix bin checksum")
     cs_p.add_argument("--input", "-i", required=True, help="Bin file to check")
-    cs_p.add_argument("--fix", action="store_true", help="Fix checksum if mismatched")
+    cs_p.add_argument("--fix", action="store_true", help="Save corrected copy; requires --output")
+    cs_p.add_argument("--output", "-o", help="New file for corrected copy (never overwrite the input)")
 
     # Ports
     subparsers.add_parser("ports", help="List available serial ports")
@@ -6723,6 +6833,24 @@ Examples:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    if getattr(args, "fix", False) and not getattr(args, "output", None):
+        parser.error("--fix requires --output for a separate corrected copy")
+    if getattr(args, "output", None) and Path(args.output).exists():
+        parser.error(f"output already exists: {args.output}; choose a new path")
+    if hasattr(args, "device_id"):
+        try:
+            device_id = int(args.device_id, 16)
+        except ValueError:
+            parser.error("--device-id must be a hex byte")
+        if not 0 <= device_id <= 255:
+            parser.error("--device-id must be a hex byte")
+        for name in ("baud", "timeout", "chunk_size"):
+            if getattr(args, name) <= 0:
+                parser.error(f"--{name.replace('_', '-')} must be positive")
+        if args.retries < 0 or args.inter_frame_delay < 0:
+            parser.error("--retries and --inter-frame-delay must be nonnegative")
+    if args.command == "read" and args.cal and args.cal_padded:
+        parser.error("choose only one of --cal and --cal-padded")
 
     if not args.command:
         # Default to GUI if available, else show help
@@ -6749,7 +6877,11 @@ def main() -> int:
         window.show()
         return app.exec()
     else:
-        return run_cli(args)
+        try:
+            return run_cli(args)
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
 
 
 if __name__ == "__main__":

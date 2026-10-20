@@ -99,8 +99,8 @@ The standalone virtual ECU is a functional test double. It acknowledges uploaded
 kernel data without executing HC11 instructions. This audit added malformed-frame,
 short-key, out-of-range read and malformed write refusal, but that does not make the
 model equivalent to a physical ECU. The flash model completes polling immediately;
-its reset/data-byte handling and protected whole-chip erase behavior require a
-separate fidelity review. Historical statements of cycle accuracy, exact physical
+the coordinating safety lane corrected reset/data-byte handling, protected
+operation status and invalid-address aliasing with synthetic regressions. Real-chip fidelity still requires a separate review. Historical statements of cycle accuracy, exact physical
 capture or bootability are not established by these tests.
 
 The main module identifies the implementation and retained reference bytecode as

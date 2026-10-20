@@ -1,0 +1,1144 @@
+{
+  "schema": "kingai.public-source-reconciliation.v1",
+  "repository": "KingAiCodeForge/KingAi-VY-V6-L36-Commo-Flasher",
+  "snapshot_utc": "2026-10-20",
+  "original_default_commit": "ad18c2bf042a05d93811a091d80698f1e2193986",
+  "privacy": "public repository refs only; no private inputs or raw firmware imported",
+  "branches": [
+    {
+      "branch": "codex/commie-flasher-failclosed-incomplete-read-backup-20261017",
+      "commit": "3d1e559897785866024f03772fdf14c2f3535414",
+      "tree": "d84ff5d96ac91132452ba97c53d04656ee8ec503",
+      "ancestor_of_integration": true,
+      "files": [
+        {
+          "path": ".gitignore",
+          "git_blob_sha1": "1ca56aef4fed527f6d10eae5f96e2b600e500154",
+          "size": 863
+        },
+        {
+          "path": "ARCHITECTURE.md",
+          "git_blob_sha1": "cc943fa908d7ed37b80a7bfedad11904edc69359",
+          "size": 20798
+        },
+        {
+          "path": "how_this_links_to_other_githubs.md",
+          "git_blob_sha1": "5ec6d04fd34296d179c0859399078e6ddda9feca",
+          "size": 15017
+        },
+        {
+          "path": "kernel_ram_to_rom_write/README.md",
+          "git_blob_sha1": "d797cdbf619e7354dcf173064cdd4cf17bc0f223",
+          "size": 9797
+        },
+        {
+          "path": "kernel_ram_to_rom_write/output/.gitkeep",
+          "git_blob_sha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+          "size": 0
+        },
+        {
+          "path": "kingai_commie_flasher.py",
+          "git_blob_sha1": "4da987669d647822ade7cf3b609ba223cda28edb",
+          "size": 303686
+        },
+        {
+          "path": "readme.md",
+          "git_blob_sha1": "d2eddff3f4f0e3a30c0d0d5d2b47caa7d2679a72",
+          "size": 26528
+        },
+        {
+          "path": "reports/FAIL_CLOSED_READ_BACKUP_AUDIT_20261017.md",
+          "git_blob_sha1": "c61cb90c0c9b2dc2ed6168f051c26c9e91f17291",
+          "size": 3170
+        },
+        {
+          "path": "run_me_first_dependancie_installer.bat",
+          "git_blob_sha1": "2b5a2f2fc41b72df673accc2dc2937e6dc32cddc",
+          "size": 5000
+        },
+        {
+          "path": "run_second_launch_kingai_commie_flasher_gui.bat",
+          "git_blob_sha1": "4db18e7077159f69efc41133aa43fc36951eba9d",
+          "size": 2378
+        },
+        {
+          "path": "settings.json",
+          "git_blob_sha1": "6fae7a48b2aa6580d1b43db9ae33e9446dea4bdd",
+          "size": 863
+        },
+        {
+          "path": "tests/_audit_sizes.py",
+          "git_blob_sha1": "66f25dafb5258eaf474d331668bd0dcf691b99d6",
+          "size": 3009
+        },
+        {
+          "path": "tests/_checksum_investigate.py",
+          "git_blob_sha1": "603ed4c766d70ce28f970ebd4f1b369de6f889f8",
+          "size": 1680
+        },
+        {
+          "path": "tests/_compare_bins.py",
+          "git_blob_sha1": "fbb14fa568cae2570634bb017883959bd5d85d35",
+          "size": 2071
+        },
+        {
+          "path": "tests/conftest.py",
+          "git_blob_sha1": "1589fc112e9ac72504d8399cf33593882a3597e3",
+          "size": 252
+        },
+        {
+          "path": "tests/test_failclosed_incomplete_reads_and_preerase_backup.py",
+          "git_blob_sha1": "19020c9cff4d6906a7868faf45359ff039a42a1d",
+          "size": 5063
+        },
+        {
+          "path": "tests/test_gui_functions.py",
+          "git_blob_sha1": "e21548830ff1ea7b23a239b2261ed511ef99ff88",
+          "size": 48883
+        },
+        {
+          "path": "tests/test_kingai_commie_flasher.py",
+          "git_blob_sha1": "440dca5b955e2bfe48d20dd5535dbc9898fde353",
+          "size": 37316
+        },
+        {
+          "path": "tests/test_vecu.py",
+          "git_blob_sha1": "a63a9c5ca5519d327213b712675710ad1d16107b",
+          "size": 4613
+        },
+        {
+          "path": "tools/ALDL_read_RAM_commands.py",
+          "git_blob_sha1": "ab26fcdf0396fbcad032837992a38211fe08d292",
+          "size": 20842
+        },
+        {
+          "path": "tools/_verify_bytecodes.py",
+          "git_blob_sha1": "3324099c50fc687b40f206b988db1a8ec2aff6fb",
+          "size": 12393
+        },
+        {
+          "path": "tools/hc11_disassembler.py",
+          "git_blob_sha1": "b60f9cbf75bb07371538da8b1ce216a0fc02ed8f",
+          "size": 42673
+        },
+        {
+          "path": "tools/virtual_aldl_frame_sender_and_vecu.py",
+          "git_blob_sha1": "7579be48c7ff7aea8a2ba4d54719529cae17f820",
+          "size": 42091
+        },
+        {
+          "path": "virtual_128kb_eeprom.py",
+          "git_blob_sha1": "d0a0eb51b1c187080e3328fc661c60961b164e09",
+          "size": 29577
+        }
+      ]
+    },
+    {
+      "branch": "codex/flasher-read-integrity-20261015-5ea52889",
+      "commit": "97f8ce276b6ba9273888a84340a4d59ecd638949",
+      "tree": "e883e9b404c26af532bef4e2a020a131421f3cdb",
+      "ancestor_of_integration": true,
+      "files": [
+        {
+          "path": ".gitignore",
+          "git_blob_sha1": "1ca56aef4fed527f6d10eae5f96e2b600e500154",
+          "size": 863
+        },
+        {
+          "path": "ARCHITECTURE.md",
+          "git_blob_sha1": "cc943fa908d7ed37b80a7bfedad11904edc69359",
+          "size": 20798
+        },
+        {
+          "path": "how_this_links_to_other_githubs.md",
+          "git_blob_sha1": "5ec6d04fd34296d179c0859399078e6ddda9feca",
+          "size": 15017
+        },
+        {
+          "path": "kernel_ram_to_rom_write/README.md",
+          "git_blob_sha1": "d797cdbf619e7354dcf173064cdd4cf17bc0f223",
+          "size": 9797
+        },
+        {
+          "path": "kernel_ram_to_rom_write/output/.gitkeep",
+          "git_blob_sha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+          "size": 0
+        },
+        {
+          "path": "kingai_commie_flasher.py",
+          "git_blob_sha1": "b2cfe13e4842a6c7b927fa6c08c939e8b44b777d",
+          "size": 304111
+        },
+        {
+          "path": "readme.md",
+          "git_blob_sha1": "d2eddff3f4f0e3a30c0d0d5d2b47caa7d2679a72",
+          "size": 26528
+        },
+        {
+          "path": "run_me_first_dependancie_installer.bat",
+          "git_blob_sha1": "2b5a2f2fc41b72df673accc2dc2937e6dc32cddc",
+          "size": 5000
+        },
+        {
+          "path": "run_second_launch_kingai_commie_flasher_gui.bat",
+          "git_blob_sha1": "4db18e7077159f69efc41133aa43fc36951eba9d",
+          "size": 2378
+        },
+        {
+          "path": "settings.json",
+          "git_blob_sha1": "6fae7a48b2aa6580d1b43db9ae33e9446dea4bdd",
+          "size": 863
+        },
+        {
+          "path": "tests/_audit_sizes.py",
+          "git_blob_sha1": "66f25dafb5258eaf474d331668bd0dcf691b99d6",
+          "size": 3009
+        },
+        {
+          "path": "tests/_checksum_investigate.py",
+          "git_blob_sha1": "603ed4c766d70ce28f970ebd4f1b369de6f889f8",
+          "size": 1680
+        },
+        {
+          "path": "tests/_compare_bins.py",
+          "git_blob_sha1": "fbb14fa568cae2570634bb017883959bd5d85d35",
+          "size": 2071
+        },
+        {
+          "path": "tests/conftest.py",
+          "git_blob_sha1": "1589fc112e9ac72504d8399cf33593882a3597e3",
+          "size": 252
+        },
+        {
+          "path": "tests/test_full_read_integrity.py",
+          "git_blob_sha1": "cfa92c0d06806e423daa4b83f7cb990e64b4e0d8",
+          "size": 5622
+        },
+        {
+          "path": "tests/test_gui_functions.py",
+          "git_blob_sha1": "e21548830ff1ea7b23a239b2261ed511ef99ff88",
+          "size": 48883
+        },
+        {
+          "path": "tests/test_kingai_commie_flasher.py",
+          "git_blob_sha1": "440dca5b955e2bfe48d20dd5535dbc9898fde353",
+          "size": 37316
+        },
+        {
+          "path": "tests/test_vecu.py",
+          "git_blob_sha1": "a63a9c5ca5519d327213b712675710ad1d16107b",
+          "size": 4613
+        },
+        {
+          "path": "tools/ALDL_read_RAM_commands.py",
+          "git_blob_sha1": "ab26fcdf0396fbcad032837992a38211fe08d292",
+          "size": 20842
+        },
+        {
+          "path": "tools/_verify_bytecodes.py",
+          "git_blob_sha1": "3324099c50fc687b40f206b988db1a8ec2aff6fb",
+          "size": 12393
+        },
+        {
+          "path": "tools/hc11_disassembler.py",
+          "git_blob_sha1": "b60f9cbf75bb07371538da8b1ce216a0fc02ed8f",
+          "size": 42673
+        },
+        {
+          "path": "tools/virtual_aldl_frame_sender_and_vecu.py",
+          "git_blob_sha1": "7579be48c7ff7aea8a2ba4d54719529cae17f820",
+          "size": 42091
+        },
+        {
+          "path": "verification-read-integrity-20261015.json",
+          "git_blob_sha1": "5d31005c2a48fd474339d66714f560cc9247d3c9",
+          "size": 878
+        },
+        {
+          "path": "virtual_128kb_eeprom.py",
+          "git_blob_sha1": "d0a0eb51b1c187080e3328fc661c60961b164e09",
+          "size": 29577
+        }
+      ]
+    },
+    {
+      "branch": "codex/local-hygiene-sync-20261007",
+      "commit": "fb06318da386ed2abc662c1eaa1ea4330bd9be2c",
+      "tree": "09b7867fd3bc26ca5ca8aba2f4676d865c6df804",
+      "ancestor_of_integration": true,
+      "files": [
+        {
+          "path": ".gitignore",
+          "git_blob_sha1": "1ca56aef4fed527f6d10eae5f96e2b600e500154",
+          "size": 863
+        },
+        {
+          "path": "ARCHITECTURE.md",
+          "git_blob_sha1": "cc943fa908d7ed37b80a7bfedad11904edc69359",
+          "size": 20798
+        },
+        {
+          "path": "how_this_links_to_other_githubs.md",
+          "git_blob_sha1": "5ec6d04fd34296d179c0859399078e6ddda9feca",
+          "size": 15017
+        },
+        {
+          "path": "kernel_ram_to_rom_write/README.md",
+          "git_blob_sha1": "d797cdbf619e7354dcf173064cdd4cf17bc0f223",
+          "size": 9797
+        },
+        {
+          "path": "kernel_ram_to_rom_write/output/.gitkeep",
+          "git_blob_sha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+          "size": 0
+        },
+        {
+          "path": "kingai_commie_flasher.py",
+          "git_blob_sha1": "7e518a094118a391ae4660e8908196344596d116",
+          "size": 302620
+        },
+        {
+          "path": "readme.md",
+          "git_blob_sha1": "d2eddff3f4f0e3a30c0d0d5d2b47caa7d2679a72",
+          "size": 26528
+        },
+        {
+          "path": "run_me_first_dependancie_installer.bat",
+          "git_blob_sha1": "2b5a2f2fc41b72df673accc2dc2937e6dc32cddc",
+          "size": 5000
+        },
+        {
+          "path": "run_second_launch_kingai_commie_flasher_gui.bat",
+          "git_blob_sha1": "4db18e7077159f69efc41133aa43fc36951eba9d",
+          "size": 2378
+        },
+        {
+          "path": "settings.json",
+          "git_blob_sha1": "6fae7a48b2aa6580d1b43db9ae33e9446dea4bdd",
+          "size": 863
+        },
+        {
+          "path": "tests/_audit_sizes.py",
+          "git_blob_sha1": "66f25dafb5258eaf474d331668bd0dcf691b99d6",
+          "size": 3009
+        },
+        {
+          "path": "tests/_checksum_investigate.py",
+          "git_blob_sha1": "603ed4c766d70ce28f970ebd4f1b369de6f889f8",
+          "size": 1680
+        },
+        {
+          "path": "tests/_compare_bins.py",
+          "git_blob_sha1": "fbb14fa568cae2570634bb017883959bd5d85d35",
+          "size": 2071
+        },
+        {
+          "path": "tests/conftest.py",
+          "git_blob_sha1": "1589fc112e9ac72504d8399cf33593882a3597e3",
+          "size": 252
+        },
+        {
+          "path": "tests/test_gui_functions.py",
+          "git_blob_sha1": "e21548830ff1ea7b23a239b2261ed511ef99ff88",
+          "size": 48883
+        },
+        {
+          "path": "tests/test_kingai_commie_flasher.py",
+          "git_blob_sha1": "440dca5b955e2bfe48d20dd5535dbc9898fde353",
+          "size": 37316
+        },
+        {
+          "path": "tests/test_vecu.py",
+          "git_blob_sha1": "a63a9c5ca5519d327213b712675710ad1d16107b",
+          "size": 4613
+        },
+        {
+          "path": "tools/ALDL_read_RAM_commands.py",
+          "git_blob_sha1": "ab26fcdf0396fbcad032837992a38211fe08d292",
+          "size": 20842
+        },
+        {
+          "path": "tools/_verify_bytecodes.py",
+          "git_blob_sha1": "3324099c50fc687b40f206b988db1a8ec2aff6fb",
+          "size": 12393
+        },
+        {
+          "path": "tools/hc11_disassembler.py",
+          "git_blob_sha1": "b60f9cbf75bb07371538da8b1ce216a0fc02ed8f",
+          "size": 42673
+        },
+        {
+          "path": "tools/virtual_aldl_frame_sender_and_vecu.py",
+          "git_blob_sha1": "7579be48c7ff7aea8a2ba4d54719529cae17f820",
+          "size": 42091
+        },
+        {
+          "path": "virtual_128kb_eeprom.py",
+          "git_blob_sha1": "d0a0eb51b1c187080e3328fc661c60961b164e09",
+          "size": 29577
+        }
+      ]
+    },
+    {
+      "branch": "main",
+      "commit": "ad18c2bf042a05d93811a091d80698f1e2193986",
+      "tree": "4850f3215222ec044c9e5fe53a7921b7fe99fc26",
+      "ancestor_of_integration": true,
+      "files": [
+        {
+          "path": ".gitignore",
+          "git_blob_sha1": "1ca56aef4fed527f6d10eae5f96e2b600e500154",
+          "size": 863
+        },
+        {
+          "path": "ARCHITECTURE.md",
+          "git_blob_sha1": "cc943fa908d7ed37b80a7bfedad11904edc69359",
+          "size": 20798
+        },
+        {
+          "path": "how_this_links_to_other_githubs.md",
+          "git_blob_sha1": "5ec6d04fd34296d179c0859399078e6ddda9feca",
+          "size": 15017
+        },
+        {
+          "path": "kernel_ram_to_rom_write/README.md",
+          "git_blob_sha1": "d797cdbf619e7354dcf173064cdd4cf17bc0f223",
+          "size": 9797
+        },
+        {
+          "path": "kernel_ram_to_rom_write/output/.gitkeep",
+          "git_blob_sha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+          "size": 0
+        },
+        {
+          "path": "kingai_commie_flasher.py",
+          "git_blob_sha1": "a8041dae154c102774ca0ddf71303d37ed5cf962",
+          "size": 302911
+        },
+        {
+          "path": "readme.md",
+          "git_blob_sha1": "bc77ff9e49abaf0d40eda67676b0f80ec4238cfd",
+          "size": 29097
+        },
+        {
+          "path": "run_me_first_dependancie_installer.bat",
+          "git_blob_sha1": "2b5a2f2fc41b72df673accc2dc2937e6dc32cddc",
+          "size": 5000
+        },
+        {
+          "path": "run_second_launch_kingai_commie_flasher_gui.bat",
+          "git_blob_sha1": "4db18e7077159f69efc41133aa43fc36951eba9d",
+          "size": 2378
+        },
+        {
+          "path": "settings.json",
+          "git_blob_sha1": "6fae7a48b2aa6580d1b43db9ae33e9446dea4bdd",
+          "size": 863
+        },
+        {
+          "path": "tests/_audit_sizes.py",
+          "git_blob_sha1": "66f25dafb5258eaf474d331668bd0dcf691b99d6",
+          "size": 3009
+        },
+        {
+          "path": "tests/_checksum_investigate.py",
+          "git_blob_sha1": "603ed4c766d70ce28f970ebd4f1b369de6f889f8",
+          "size": 1680
+        },
+        {
+          "path": "tests/_compare_bins.py",
+          "git_blob_sha1": "fbb14fa568cae2570634bb017883959bd5d85d35",
+          "size": 2071
+        },
+        {
+          "path": "tests/conftest.py",
+          "git_blob_sha1": "1589fc112e9ac72504d8399cf33593882a3597e3",
+          "size": 252
+        },
+        {
+          "path": "tests/test_gui_functions.py",
+          "git_blob_sha1": "e21548830ff1ea7b23a239b2261ed511ef99ff88",
+          "size": 48883
+        },
+        {
+          "path": "tests/test_kingai_commie_flasher.py",
+          "git_blob_sha1": "440dca5b955e2bfe48d20dd5535dbc9898fde353",
+          "size": 37316
+        },
+        {
+          "path": "tests/test_vecu.py",
+          "git_blob_sha1": "a63a9c5ca5519d327213b712675710ad1d16107b",
+          "size": 4613
+        },
+        {
+          "path": "tools/ALDL_read_RAM_commands.py",
+          "git_blob_sha1": "ab26fcdf0396fbcad032837992a38211fe08d292",
+          "size": 20842
+        },
+        {
+          "path": "tools/_verify_bytecodes.py",
+          "git_blob_sha1": "3324099c50fc687b40f206b988db1a8ec2aff6fb",
+          "size": 12393
+        },
+        {
+          "path": "tools/hc11_disassembler.py",
+          "git_blob_sha1": "b60f9cbf75bb07371538da8b1ce216a0fc02ed8f",
+          "size": 42673
+        },
+        {
+          "path": "tools/virtual_aldl_frame_sender_and_vecu.py",
+          "git_blob_sha1": "7579be48c7ff7aea8a2ba4d54719529cae17f820",
+          "size": 42091
+        },
+        {
+          "path": "virtual_128kb_eeprom.py",
+          "git_blob_sha1": "d0a0eb51b1c187080e3328fc661c60961b164e09",
+          "size": 29577
+        }
+      ]
+    },
+    {
+      "branch": "review/failclosed-read-backup-chip-gates-20261017",
+      "commit": "1358f9ad93cd776c85b88d15545cf93960574cbb",
+      "tree": "04dbc4f2eca342f95363c82f8e0c8d5f6028bed8",
+      "ancestor_of_integration": true,
+      "files": [
+        {
+          "path": ".gitignore",
+          "git_blob_sha1": "1ca56aef4fed527f6d10eae5f96e2b600e500154",
+          "size": 863
+        },
+        {
+          "path": "ARCHITECTURE.md",
+          "git_blob_sha1": "cc943fa908d7ed37b80a7bfedad11904edc69359",
+          "size": 20798
+        },
+        {
+          "path": "docs/FAILCLOSED_READ_WRITE_GATES_20261017.md",
+          "git_blob_sha1": "da8085ef597319a14ca19feadd6503de520500b1",
+          "size": 2597
+        },
+        {
+          "path": "how_this_links_to_other_githubs.md",
+          "git_blob_sha1": "5ec6d04fd34296d179c0859399078e6ddda9feca",
+          "size": 15017
+        },
+        {
+          "path": "kernel_ram_to_rom_write/README.md",
+          "git_blob_sha1": "d797cdbf619e7354dcf173064cdd4cf17bc0f223",
+          "size": 9797
+        },
+        {
+          "path": "kernel_ram_to_rom_write/output/.gitkeep",
+          "git_blob_sha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+          "size": 0
+        },
+        {
+          "path": "kingai_commie_flasher.py",
+          "git_blob_sha1": "06382061bf2778576fcf5e7fd7af5daaa6cd6710",
+          "size": 304321
+        },
+        {
+          "path": "readme.md",
+          "git_blob_sha1": "d2eddff3f4f0e3a30c0d0d5d2b47caa7d2679a72",
+          "size": 26528
+        },
+        {
+          "path": "run_me_first_dependancie_installer.bat",
+          "git_blob_sha1": "2b5a2f2fc41b72df673accc2dc2937e6dc32cddc",
+          "size": 5000
+        },
+        {
+          "path": "run_second_launch_kingai_commie_flasher_gui.bat",
+          "git_blob_sha1": "4db18e7077159f69efc41133aa43fc36951eba9d",
+          "size": 2378
+        },
+        {
+          "path": "settings.json",
+          "git_blob_sha1": "6fae7a48b2aa6580d1b43db9ae33e9446dea4bdd",
+          "size": 863
+        },
+        {
+          "path": "tests/_audit_sizes.py",
+          "git_blob_sha1": "66f25dafb5258eaf474d331668bd0dcf691b99d6",
+          "size": 3009
+        },
+        {
+          "path": "tests/_checksum_investigate.py",
+          "git_blob_sha1": "603ed4c766d70ce28f970ebd4f1b369de6f889f8",
+          "size": 1680
+        },
+        {
+          "path": "tests/_compare_bins.py",
+          "git_blob_sha1": "fbb14fa568cae2570634bb017883959bd5d85d35",
+          "size": 2071
+        },
+        {
+          "path": "tests/conftest.py",
+          "git_blob_sha1": "1589fc112e9ac72504d8399cf33593882a3597e3",
+          "size": 252
+        },
+        {
+          "path": "tests/test_flash_failclosed_gates.py",
+          "git_blob_sha1": "f3fca940d4fe9200193c70430aacb6abe679e6e9",
+          "size": 3913
+        },
+        {
+          "path": "tests/test_gui_functions.py",
+          "git_blob_sha1": "e21548830ff1ea7b23a239b2261ed511ef99ff88",
+          "size": 48883
+        },
+        {
+          "path": "tests/test_kingai_commie_flasher.py",
+          "git_blob_sha1": "440dca5b955e2bfe48d20dd5535dbc9898fde353",
+          "size": 37316
+        },
+        {
+          "path": "tests/test_vecu.py",
+          "git_blob_sha1": "a63a9c5ca5519d327213b712675710ad1d16107b",
+          "size": 4613
+        },
+        {
+          "path": "tools/ALDL_read_RAM_commands.py",
+          "git_blob_sha1": "ab26fcdf0396fbcad032837992a38211fe08d292",
+          "size": 20842
+        },
+        {
+          "path": "tools/_verify_bytecodes.py",
+          "git_blob_sha1": "3324099c50fc687b40f206b988db1a8ec2aff6fb",
+          "size": 12393
+        },
+        {
+          "path": "tools/hc11_disassembler.py",
+          "git_blob_sha1": "b60f9cbf75bb07371538da8b1ce216a0fc02ed8f",
+          "size": 42673
+        },
+        {
+          "path": "tools/virtual_aldl_frame_sender_and_vecu.py",
+          "git_blob_sha1": "7579be48c7ff7aea8a2ba4d54719529cae17f820",
+          "size": 42091
+        },
+        {
+          "path": "virtual_128kb_eeprom.py",
+          "git_blob_sha1": "d0a0eb51b1c187080e3328fc661c60961b164e09",
+          "size": 29577
+        }
+      ]
+    },
+    {
+      "branch": "review/flash-fail-closed-preerase-20261017",
+      "commit": "a5e7b1110826834760ad3f724dc58b6f6b7c04b2",
+      "tree": "7bd015d61f18218ba97a00b3b0e8203647379666",
+      "ancestor_of_integration": true,
+      "files": [
+        {
+          "path": ".gitignore",
+          "git_blob_sha1": "1ca56aef4fed527f6d10eae5f96e2b600e500154",
+          "size": 863
+        },
+        {
+          "path": "ARCHITECTURE.md",
+          "git_blob_sha1": "cc943fa908d7ed37b80a7bfedad11904edc69359",
+          "size": 20798
+        },
+        {
+          "path": "how_this_links_to_other_githubs.md",
+          "git_blob_sha1": "5ec6d04fd34296d179c0859399078e6ddda9feca",
+          "size": 15017
+        },
+        {
+          "path": "kernel_ram_to_rom_write/README.md",
+          "git_blob_sha1": "d797cdbf619e7354dcf173064cdd4cf17bc0f223",
+          "size": 9797
+        },
+        {
+          "path": "kernel_ram_to_rom_write/output/.gitkeep",
+          "git_blob_sha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+          "size": 0
+        },
+        {
+          "path": "kingai_commie_flasher.py",
+          "git_blob_sha1": "9dc8443a426f23099295e902d1c99bfe9d4a514d",
+          "size": 303931
+        },
+        {
+          "path": "readme.md",
+          "git_blob_sha1": "294d92a5f6c95b33c20bad11915e6231bb6115eb",
+          "size": 29304
+        },
+        {
+          "path": "run_me_first_dependancie_installer.bat",
+          "git_blob_sha1": "2b5a2f2fc41b72df673accc2dc2937e6dc32cddc",
+          "size": 5000
+        },
+        {
+          "path": "run_second_launch_kingai_commie_flasher_gui.bat",
+          "git_blob_sha1": "4db18e7077159f69efc41133aa43fc36951eba9d",
+          "size": 2378
+        },
+        {
+          "path": "settings.json",
+          "git_blob_sha1": "6fae7a48b2aa6580d1b43db9ae33e9446dea4bdd",
+          "size": 863
+        },
+        {
+          "path": "tests/_audit_sizes.py",
+          "git_blob_sha1": "66f25dafb5258eaf474d331668bd0dcf691b99d6",
+          "size": 3009
+        },
+        {
+          "path": "tests/_checksum_investigate.py",
+          "git_blob_sha1": "603ed4c766d70ce28f970ebd4f1b369de6f889f8",
+          "size": 1680
+        },
+        {
+          "path": "tests/_compare_bins.py",
+          "git_blob_sha1": "fbb14fa568cae2570634bb017883959bd5d85d35",
+          "size": 2071
+        },
+        {
+          "path": "tests/conftest.py",
+          "git_blob_sha1": "1589fc112e9ac72504d8399cf33593882a3597e3",
+          "size": 252
+        },
+        {
+          "path": "tests/test_flash_failclosed_guards.py",
+          "git_blob_sha1": "329e53f550ce10663a96ac48a0b1aea5552d64db",
+          "size": 2958
+        },
+        {
+          "path": "tests/test_gui_functions.py",
+          "git_blob_sha1": "e21548830ff1ea7b23a239b2261ed511ef99ff88",
+          "size": 48883
+        },
+        {
+          "path": "tests/test_kingai_commie_flasher.py",
+          "git_blob_sha1": "440dca5b955e2bfe48d20dd5535dbc9898fde353",
+          "size": 37316
+        },
+        {
+          "path": "tests/test_vecu.py",
+          "git_blob_sha1": "a63a9c5ca5519d327213b712675710ad1d16107b",
+          "size": 4613
+        },
+        {
+          "path": "tools/ALDL_read_RAM_commands.py",
+          "git_blob_sha1": "ab26fcdf0396fbcad032837992a38211fe08d292",
+          "size": 20842
+        },
+        {
+          "path": "tools/_verify_bytecodes.py",
+          "git_blob_sha1": "3324099c50fc687b40f206b988db1a8ec2aff6fb",
+          "size": 12393
+        },
+        {
+          "path": "tools/hc11_disassembler.py",
+          "git_blob_sha1": "b60f9cbf75bb07371538da8b1ce216a0fc02ed8f",
+          "size": 42673
+        },
+        {
+          "path": "tools/virtual_aldl_frame_sender_and_vecu.py",
+          "git_blob_sha1": "7579be48c7ff7aea8a2ba4d54719529cae17f820",
+          "size": 42091
+        },
+        {
+          "path": "virtual_128kb_eeprom.py",
+          "git_blob_sha1": "d0a0eb51b1c187080e3328fc661c60961b164e09",
+          "size": 29577
+        }
+      ]
+    },
+    {
+      "branch": "review/flash-safety-disclosure-20261017",
+      "commit": "f3c9af784df3fddb632fab3afc6cc4e251cd1172",
+      "tree": "4850f3215222ec044c9e5fe53a7921b7fe99fc26",
+      "ancestor_of_integration": true,
+      "files": [
+        {
+          "path": ".gitignore",
+          "git_blob_sha1": "1ca56aef4fed527f6d10eae5f96e2b600e500154",
+          "size": 863
+        },
+        {
+          "path": "ARCHITECTURE.md",
+          "git_blob_sha1": "cc943fa908d7ed37b80a7bfedad11904edc69359",
+          "size": 20798
+        },
+        {
+          "path": "how_this_links_to_other_githubs.md",
+          "git_blob_sha1": "5ec6d04fd34296d179c0859399078e6ddda9feca",
+          "size": 15017
+        },
+        {
+          "path": "kernel_ram_to_rom_write/README.md",
+          "git_blob_sha1": "d797cdbf619e7354dcf173064cdd4cf17bc0f223",
+          "size": 9797
+        },
+        {
+          "path": "kernel_ram_to_rom_write/output/.gitkeep",
+          "git_blob_sha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+          "size": 0
+        },
+        {
+          "path": "kingai_commie_flasher.py",
+          "git_blob_sha1": "a8041dae154c102774ca0ddf71303d37ed5cf962",
+          "size": 302911
+        },
+        {
+          "path": "readme.md",
+          "git_blob_sha1": "bc77ff9e49abaf0d40eda67676b0f80ec4238cfd",
+          "size": 29097
+        },
+        {
+          "path": "run_me_first_dependancie_installer.bat",
+          "git_blob_sha1": "2b5a2f2fc41b72df673accc2dc2937e6dc32cddc",
+          "size": 5000
+        },
+        {
+          "path": "run_second_launch_kingai_commie_flasher_gui.bat",
+          "git_blob_sha1": "4db18e7077159f69efc41133aa43fc36951eba9d",
+          "size": 2378
+        },
+        {
+          "path": "settings.json",
+          "git_blob_sha1": "6fae7a48b2aa6580d1b43db9ae33e9446dea4bdd",
+          "size": 863
+        },
+        {
+          "path": "tests/_audit_sizes.py",
+          "git_blob_sha1": "66f25dafb5258eaf474d331668bd0dcf691b99d6",
+          "size": 3009
+        },
+        {
+          "path": "tests/_checksum_investigate.py",
+          "git_blob_sha1": "603ed4c766d70ce28f970ebd4f1b369de6f889f8",
+          "size": 1680
+        },
+        {
+          "path": "tests/_compare_bins.py",
+          "git_blob_sha1": "fbb14fa568cae2570634bb017883959bd5d85d35",
+          "size": 2071
+        },
+        {
+          "path": "tests/conftest.py",
+          "git_blob_sha1": "1589fc112e9ac72504d8399cf33593882a3597e3",
+          "size": 252
+        },
+        {
+          "path": "tests/test_gui_functions.py",
+          "git_blob_sha1": "e21548830ff1ea7b23a239b2261ed511ef99ff88",
+          "size": 48883
+        },
+        {
+          "path": "tests/test_kingai_commie_flasher.py",
+          "git_blob_sha1": "440dca5b955e2bfe48d20dd5535dbc9898fde353",
+          "size": 37316
+        },
+        {
+          "path": "tests/test_vecu.py",
+          "git_blob_sha1": "a63a9c5ca5519d327213b712675710ad1d16107b",
+          "size": 4613
+        },
+        {
+          "path": "tools/ALDL_read_RAM_commands.py",
+          "git_blob_sha1": "ab26fcdf0396fbcad032837992a38211fe08d292",
+          "size": 20842
+        },
+        {
+          "path": "tools/_verify_bytecodes.py",
+          "git_blob_sha1": "3324099c50fc687b40f206b988db1a8ec2aff6fb",
+          "size": 12393
+        },
+        {
+          "path": "tools/hc11_disassembler.py",
+          "git_blob_sha1": "b60f9cbf75bb07371538da8b1ce216a0fc02ed8f",
+          "size": 42673
+        },
+        {
+          "path": "tools/virtual_aldl_frame_sender_and_vecu.py",
+          "git_blob_sha1": "7579be48c7ff7aea8a2ba4d54719529cae17f820",
+          "size": 42091
+        },
+        {
+          "path": "virtual_128kb_eeprom.py",
+          "git_blob_sha1": "d0a0eb51b1c187080e3328fc661c60961b164e09",
+          "size": 29577
+        }
+      ]
+    },
+    {
+      "branch": "review/reverse-static-55-flasher-no-erase-20261019",
+      "commit": "b010a176b7716d3dd760f6140b86cde8487c1f49",
+      "tree": "bc6be35b3d31d839a2095ba4084e440ea257f319",
+      "ancestor_of_integration": true,
+      "files": [
+        {
+          "path": ".gitignore",
+          "git_blob_sha1": "1ca56aef4fed527f6d10eae5f96e2b600e500154",
+          "size": 863
+        },
+        {
+          "path": "ARCHITECTURE.md",
+          "git_blob_sha1": "cc943fa908d7ed37b80a7bfedad11904edc69359",
+          "size": 20798
+        },
+        {
+          "path": "how_this_links_to_other_githubs.md",
+          "git_blob_sha1": "5ec6d04fd34296d179c0859399078e6ddda9feca",
+          "size": 15017
+        },
+        {
+          "path": "kernel_ram_to_rom_write/README.md",
+          "git_blob_sha1": "d797cdbf619e7354dcf173064cdd4cf17bc0f223",
+          "size": 9797
+        },
+        {
+          "path": "kernel_ram_to_rom_write/output/.gitkeep",
+          "git_blob_sha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+          "size": 0
+        },
+        {
+          "path": "kingai_commie_flasher.py",
+          "git_blob_sha1": "0baa058ebd05663cc3b0ad5504d1048946f39ca2",
+          "size": 304743
+        },
+        {
+          "path": "readme.md",
+          "git_blob_sha1": "d2eddff3f4f0e3a30c0d0d5d2b47caa7d2679a72",
+          "size": 26528
+        },
+        {
+          "path": "reports/FAIL_CLOSED_READ_BACKUP_AUDIT_20261017.md",
+          "git_blob_sha1": "c61cb90c0c9b2dc2ed6168f051c26c9e91f17291",
+          "size": 3170
+        },
+        {
+          "path": "run_me_first_dependancie_installer.bat",
+          "git_blob_sha1": "2b5a2f2fc41b72df673accc2dc2937e6dc32cddc",
+          "size": 5000
+        },
+        {
+          "path": "run_second_launch_kingai_commie_flasher_gui.bat",
+          "git_blob_sha1": "4db18e7077159f69efc41133aa43fc36951eba9d",
+          "size": 2378
+        },
+        {
+          "path": "settings.json",
+          "git_blob_sha1": "6fae7a48b2aa6580d1b43db9ae33e9446dea4bdd",
+          "size": 863
+        },
+        {
+          "path": "tests/_audit_sizes.py",
+          "git_blob_sha1": "66f25dafb5258eaf474d331668bd0dcf691b99d6",
+          "size": 3009
+        },
+        {
+          "path": "tests/_checksum_investigate.py",
+          "git_blob_sha1": "603ed4c766d70ce28f970ebd4f1b369de6f889f8",
+          "size": 1680
+        },
+        {
+          "path": "tests/_compare_bins.py",
+          "git_blob_sha1": "fbb14fa568cae2570634bb017883959bd5d85d35",
+          "size": 2071
+        },
+        {
+          "path": "tests/conftest.py",
+          "git_blob_sha1": "1589fc112e9ac72504d8399cf33593882a3597e3",
+          "size": 252
+        },
+        {
+          "path": "tests/test_failclosed_incomplete_reads_and_preerase_backup.py",
+          "git_blob_sha1": "71ba0326b327d5d64bd8032c3c0f607f1629c6f4",
+          "size": 5068
+        },
+        {
+          "path": "tests/test_gui_functions.py",
+          "git_blob_sha1": "e21548830ff1ea7b23a239b2261ed511ef99ff88",
+          "size": 48883
+        },
+        {
+          "path": "tests/test_kingai_commie_flasher.py",
+          "git_blob_sha1": "440dca5b955e2bfe48d20dd5535dbc9898fde353",
+          "size": 37316
+        },
+        {
+          "path": "tests/test_strict_preerase_chip_backup_cancel_20261019.py",
+          "git_blob_sha1": "10cffe87a03d860e183324e0ddd4dbd59df59d61",
+          "size": 3861
+        },
+        {
+          "path": "tests/test_vecu.py",
+          "git_blob_sha1": "a63a9c5ca5519d327213b712675710ad1d16107b",
+          "size": 4613
+        },
+        {
+          "path": "tools/ALDL_read_RAM_commands.py",
+          "git_blob_sha1": "ab26fcdf0396fbcad032837992a38211fe08d292",
+          "size": 20842
+        },
+        {
+          "path": "tools/_verify_bytecodes.py",
+          "git_blob_sha1": "3324099c50fc687b40f206b988db1a8ec2aff6fb",
+          "size": 12393
+        },
+        {
+          "path": "tools/hc11_disassembler.py",
+          "git_blob_sha1": "b60f9cbf75bb07371538da8b1ce216a0fc02ed8f",
+          "size": 42673
+        },
+        {
+          "path": "tools/virtual_aldl_frame_sender_and_vecu.py",
+          "git_blob_sha1": "7579be48c7ff7aea8a2ba4d54719529cae17f820",
+          "size": 42091
+        },
+        {
+          "path": "virtual_128kb_eeprom.py",
+          "git_blob_sha1": "d0a0eb51b1c187080e3328fc661c60961b164e09",
+          "size": 29577
+        }
+      ]
+    },
+    {
+      "branch": "review/vy-flash-cancel-and-overlong-regressions-20261017",
+      "commit": "569f7f25e8443892ab029c0465cdb434b49604aa",
+      "tree": "207200e48bfd3fc48960ff569070ca2045d23947",
+      "ancestor_of_integration": true,
+      "files": [
+        {
+          "path": ".gitignore",
+          "git_blob_sha1": "1ca56aef4fed527f6d10eae5f96e2b600e500154",
+          "size": 863
+        },
+        {
+          "path": "ARCHITECTURE.md",
+          "git_blob_sha1": "cc943fa908d7ed37b80a7bfedad11904edc69359",
+          "size": 20798
+        },
+        {
+          "path": "how_this_links_to_other_githubs.md",
+          "git_blob_sha1": "5ec6d04fd34296d179c0859399078e6ddda9feca",
+          "size": 15017
+        },
+        {
+          "path": "kernel_ram_to_rom_write/README.md",
+          "git_blob_sha1": "d797cdbf619e7354dcf173064cdd4cf17bc0f223",
+          "size": 9797
+        },
+        {
+          "path": "kernel_ram_to_rom_write/output/.gitkeep",
+          "git_blob_sha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+          "size": 0
+        },
+        {
+          "path": "kingai_commie_flasher.py",
+          "git_blob_sha1": "88f5ddb3666de225cbf0f80c079b4c1991f93027",
+          "size": 304332
+        },
+        {
+          "path": "readme.md",
+          "git_blob_sha1": "294d92a5f6c95b33c20bad11915e6231bb6115eb",
+          "size": 29304
+        },
+        {
+          "path": "run_me_first_dependancie_installer.bat",
+          "git_blob_sha1": "2b5a2f2fc41b72df673accc2dc2937e6dc32cddc",
+          "size": 5000
+        },
+        {
+          "path": "run_second_launch_kingai_commie_flasher_gui.bat",
+          "git_blob_sha1": "4db18e7077159f69efc41133aa43fc36951eba9d",
+          "size": 2378
+        },
+        {
+          "path": "settings.json",
+          "git_blob_sha1": "6fae7a48b2aa6580d1b43db9ae33e9446dea4bdd",
+          "size": 863
+        },
+        {
+          "path": "tests/_audit_sizes.py",
+          "git_blob_sha1": "66f25dafb5258eaf474d331668bd0dcf691b99d6",
+          "size": 3009
+        },
+        {
+          "path": "tests/_checksum_investigate.py",
+          "git_blob_sha1": "603ed4c766d70ce28f970ebd4f1b369de6f889f8",
+          "size": 1680
+        },
+        {
+          "path": "tests/_compare_bins.py",
+          "git_blob_sha1": "fbb14fa568cae2570634bb017883959bd5d85d35",
+          "size": 2071
+        },
+        {
+          "path": "tests/conftest.py",
+          "git_blob_sha1": "1589fc112e9ac72504d8399cf33593882a3597e3",
+          "size": 252
+        },
+        {
+          "path": "tests/test_flash_failclosed_guards.py",
+          "git_blob_sha1": "329e53f550ce10663a96ac48a0b1aea5552d64db",
+          "size": 2958
+        },
+        {
+          "path": "tests/test_flash_guard_followup.py",
+          "git_blob_sha1": "59df3faf1b93ce63160c99b52e6ba5e47d87e0d5",
+          "size": 3088
+        },
+        {
+          "path": "tests/test_gui_functions.py",
+          "git_blob_sha1": "e21548830ff1ea7b23a239b2261ed511ef99ff88",
+          "size": 48883
+        },
+        {
+          "path": "tests/test_kingai_commie_flasher.py",
+          "git_blob_sha1": "440dca5b955e2bfe48d20dd5535dbc9898fde353",
+          "size": 37316
+        },
+        {
+          "path": "tests/test_vecu.py",
+          "git_blob_sha1": "a63a9c5ca5519d327213b712675710ad1d16107b",
+          "size": 4613
+        },
+        {
+          "path": "tools/ALDL_read_RAM_commands.py",
+          "git_blob_sha1": "ab26fcdf0396fbcad032837992a38211fe08d292",
+          "size": 20842
+        },
+        {
+          "path": "tools/_verify_bytecodes.py",
+          "git_blob_sha1": "3324099c50fc687b40f206b988db1a8ec2aff6fb",
+          "size": 12393
+        },
+        {
+          "path": "tools/hc11_disassembler.py",
+          "git_blob_sha1": "b60f9cbf75bb07371538da8b1ce216a0fc02ed8f",
+          "size": 42673
+        },
+        {
+          "path": "tools/virtual_aldl_frame_sender_and_vecu.py",
+          "git_blob_sha1": "7579be48c7ff7aea8a2ba4d54719529cae17f820",
+          "size": 42091
+        },
+        {
+          "path": "virtual_128kb_eeprom.py",
+          "git_blob_sha1": "d0a0eb51b1c187080e3328fc661c60961b164e09",
+          "size": 29577
+        }
+      ]
+    }
+  ],
+  "preservation": "All original branch refs retained unchanged; exact objects preserved in local bundle. The bundle is not a release asset.",
+  "coverage": {
+    "PR1": "Already in main; protective ignores retained",
+    "PR2": "Already in main; original docs branch ancestry also preserved",
+    "PR3_PR5": "Merged ancestry; both unique test modules retained",
+    "PR6_PR7": "Merged ancestry; custom-read fixes, reports and both unique test modules retained",
+    "PR4_closed": "Independent prototype ancestry and distinct tests/docs retained; overlapping implementation reconciled",
+    "read_integrity": "Merged ancestry; detailed read stats and every distinct regression retained"
+  },
+  "changes_to_retained_tests": [
+    "Prestart cancellation expects no reset/session call before programming starts; original assertions remain in historical refs.",
+    "Firmware-dependent print-only test_vecu.py replaced by seven deterministic synthetic pytest tests; original script preserved in historical refs."
+  ]
+}
