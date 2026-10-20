@@ -1,3 +1,12 @@
+> **Historical prototype design; excluded from implemented release scope.**
+> This directory contains design documentation and an empty output placeholder,
+> not the capture driver described below. The retained text states intended
+> behavior; its claims of physical equivalence, kernel execution and bootability
+> have not been demonstrated. Current virtual transports acknowledge/interpet
+> selected frames without executing the uploaded HC11 kernel. No generated
+> image is established as safe to program or boot. Original text remains in
+> history and follows for preservation; it is not a qualification receipt.
+
 # Kernel RAM-to-ROM Write Simulator — "Virtual EEPROM Output"
 
 **Project:** KingAI Commie Flasher  

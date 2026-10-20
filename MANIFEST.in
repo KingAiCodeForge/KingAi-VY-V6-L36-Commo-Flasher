@@ -1,0 +1,7 @@
+include readme.md ARCHITECTURE.md how_this_links_to_other_githubs.md
+include run_me_first_dependancie_installer.bat run_second_launch_kingai_commie_flasher_gui.bat
+include settings.json
+recursive-include tests *.py
+recursive-include reports *.md *.csv *.json
+include kernel_ram_to_rom_write/README.md
+global-exclude *.bin *.cal *.partial *.partial.json *.capture *.xdl *.log *.pyc

@@ -598,6 +598,8 @@ class HC11Disassembler:
     def disassemble(self, data: bytes, base_addr: int = 0,
                     max_instructions: int = 0) -> List[DisassembledInstruction]:
         """Disassemble a block of bytes. Returns list of DisassembledInstruction."""
+        if isinstance(data, int):
+            raise TypeError("Disassembly requires byte data, not a byte count")
         data = bytes(data)
         results: List[DisassembledInstruction] = []
         offset = 0
@@ -621,7 +623,9 @@ class HC11Disassembler:
 
     def decode_one(self, data: bytes, offset: int = 0,
                    base_addr: int = 0) -> Optional[DisassembledInstruction]:
-        """Decode exactly one instruction at the given offset."""
+        """Decode exactly one instruction at a nonnegative byte offset."""
+        if type(offset) is not int or offset < 0:
+            raise ValueError("Instruction offset must be a nonnegative integer")
         if offset >= len(data):
             return None
 

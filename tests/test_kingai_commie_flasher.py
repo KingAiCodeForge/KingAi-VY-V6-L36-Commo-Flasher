@@ -20,7 +20,7 @@ Covers every non-GUI section of kingai_commie_flasher.py:
   Section 13 — CLI helpers
 
 Run:
-    cd A:\\kingai_commie_flasher
+    cd path/to/your/checkout
     pytest tests/ -v --html=tests/report.html --self-contained-html
 """
 

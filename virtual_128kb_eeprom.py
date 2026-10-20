@@ -3,7 +3,7 @@
 virtual_128kb_eeprom.py — AMD 29F010 NOR Flash Simulator
 =========================================================
 
-1:1 simulation of the AMD Am29F010 128KB NOR flash chip used in the
+Functional software model of the AMD Am29F010 128KB NOR flash chip used in the
 Delco/Delphi 68HC11F1 PCM (VY V6 Commodore, OS $060A, 92118883).
 
 Chip Specs:
@@ -15,7 +15,7 @@ Chip Specs:
   - Program: can only clear bits (1→0), NOT set them (0→1)
   - Erase: sets all bits to 1 within a 16KB sector
 
-Command Sequences (directly from AMD datasheet):
+Command sequences represented by this software model (hardware unqualified):
   - Software ID Entry:  AA→5555, 55→2AAA, 90→5555
   - Software ID Exit:   AA→5555, 55→2AAA, F0→5555  (or just F0→any)
   - Byte Program:       AA→5555, 55→2AAA, A0→5555, DATA→addr
@@ -24,7 +24,7 @@ Command Sequences (directly from AMD datasheet):
   - Reset/Read:         F0→any
 
 This module is used by virtual_aldl_frame_sender_and_vecu.py — the HC11 kernel
-running in the vECU calls these flash operations just like real hardware.
+running in the vECU exercises this functional model; no electrical behavior is proven.
 
 MIT License — Copyright (c) 2026 Jason King (pcmhacking.net: kingaustraliagg)
 """
@@ -38,8 +38,8 @@ from enum import Enum, auto
 from typing import Optional, List, Tuple
 
 # ── Logging Setup (merged from ignore/log_setup.py — same pattern as kingai_commie_flasher.py) ──
-LOG_DIR = Path(__file__).resolve().parent / "logs"
-LOG_DIR.mkdir(parents=True, exist_ok=True)
+from kingai_paths import data_directory
+LOG_DIR = data_directory() / "logs"
 
 try:
     from rich.logging import RichHandler
@@ -65,8 +65,6 @@ def setup_logging(
     Log files: ``<log_dir>/<name>_YYYYMMDD_HHMMSS.log``
     """
     log_dir = log_dir or LOG_DIR
-    log_dir.mkdir(parents=True, exist_ok=True)
-
     logger = logging.getLogger(name)
     if logger.handlers:
         return logger
@@ -79,10 +77,14 @@ def setup_logging(
         "%(asctime)s | %(levelname)-7s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    fh = logging.FileHandler(str(log_file), encoding="utf-8")
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(file_fmt)
-    logger.addHandler(fh)
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        fh = logging.FileHandler(str(log_file), encoding="utf-8")
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(file_fmt)
+        logger.addHandler(fh)
+    except OSError as exc:
+        print(f"WARNING: cannot write logs to {log_dir}: {exc}", file=sys.stderr)
 
     # ── Console handler: only important stuff (WARNING+ default) ──
     if rich_console and RICH_LOGGING_AVAILABLE:
@@ -169,18 +171,21 @@ class FlashState(Enum):
 
 class AMD29F010:
     """
-    Cycle-accurate AMD Am29F010 128KB NOR flash chip simulator.
+    Functional AMD Am29F010 128KB NOR flash model for offline research.
 
-    Implements the full command state machine from the AMD datasheet,
+    This is not cycle-accurate: operations complete immediately. Passing a
+    synthetic test does not validate physical timing, voltage or recovery.
+
+    Models selected command state transitions for software tests,
     including:
       - Normal read mode
       - Software ID (autoselect) for manufacturer/device/protect read
       - Byte programming (can only clear bits, 1→0)
       - Sector erase (sets all bytes in 16KB sector to 0xFF)
       - Chip erase
-      - Toggle bit polling (DQ6) for program/erase status
-      - Error flag (DQ5) timeout simulation
-      - Reset (F0) at any point returns to read mode
+      - Deterministic program/erase status polling
+      - Error flags for refused virtual operations (no elapsed-time model)
+      - Reset (F0) outside a pending program-data byte returns to read mode
 
     Usage:
         flash = AMD29F010()
@@ -250,7 +255,8 @@ class AMD29F010:
 
     def save_to_file(self, path: str) -> None:
         """Save flash contents to a .bin file."""
-        Path(path).write_bytes(bytes(self._data))
+        from kingai_paths import write_new_file
+        write_new_file(path, bytes(self._data))
         log.info("Flash saved to %s", path)
 
     def load_from_bytes(self, data: bytes) -> None:
@@ -262,17 +268,31 @@ class AMD29F010:
     # ── Address Helpers ──
 
     @staticmethod
+    def _validate_address(address: int) -> None:
+        if type(address) is not int or not 0 <= address < FLASH_SIZE:
+            raise ValueError(f"Flash address must be an integer in 0..{FLASH_SIZE - 1}")
+
+    @staticmethod
+    def _validate_byte(value: int) -> None:
+        if type(value) is not int or not 0 <= value <= 0xFF:
+            raise ValueError("Flash byte must be an integer in 0..255")
+
+    @staticmethod
     def addr_to_sector(address: int) -> int:
-        """Get sector number (0-7) for a given address."""
-        return (address & 0x1FFFF) // SECTOR_SIZE
+        """Get sector number (0-7), rejecting invalid addresses without aliasing."""
+        AMD29F010._validate_address(address)
+        return address // SECTOR_SIZE
 
     @staticmethod
     def sector_base(sector: int) -> int:
         """Get base address for a sector."""
+        if type(sector) is not int or not 0 <= sector < NUM_SECTORS:
+            raise ValueError("Sector must be an integer in 0..7")
         return sector * SECTOR_SIZE
 
     def is_sector_protected(self, sector: int) -> bool:
         """Check if a sector is write-protected."""
+        self.sector_base(sector)  # validate before indexing
         return self._sector_protect[sector] == SECTOR_PROTECT_PROTECTED
 
     # ── Core Operations ──
@@ -283,7 +303,7 @@ class AMD29F010:
         In AUTOSELECT mode returns manufacturer/device/protect data.
         In PROGRAMMING/ERASING mode returns toggle-bit status.
         """
-        address = address & 0x1FFFF  # Mask to 128KB
+        self._validate_address(address)
 
         if self._state == FlashState.AUTOSELECT:
             self.stats['id_reads'] += 1
@@ -321,13 +341,13 @@ class AMD29F010:
     def write(self, address: int, value: int) -> None:
         """
         Write a byte to flash (command or data).
-        Implements the full AMD command state machine.
+        Advances the functional command model; no electrical timing is simulated.
         """
-        address = address & 0x1FFFF
-        value = value & 0xFF
+        self._validate_address(address)
+        self._validate_byte(value)
 
-        # Reset command (F0) works from ANY state
-        if value == CMD_RESET:
+        # In PROGRAM state the next byte is data, including 0xF0.
+        if value == CMD_RESET and self._state != FlashState.PROGRAM:
             self._reset()
             return
 
@@ -396,7 +416,7 @@ class AMD29F010:
             self._program_complete = True
             self._state = FlashState.READ
             return (True, self._error_flag)
-        return (True, False)
+        return (True, self._error_flag)
 
     # ── Internal Operations ──
 
@@ -461,7 +481,11 @@ class AMD29F010:
         log.info("Erased sector %d ($%05X-$%05X)", sector, base, base + SECTOR_SIZE - 1)
 
     def _erase_chip(self) -> None:
-        """Erase entire chip (set all bytes to 0xFF)."""
+        """Erase an unprotected virtual chip; protected contents are preserved."""
+        if any(self.is_sector_protected(sector) for sector in range(NUM_SECTORS)):
+            self._error_flag = True
+            self._state = FlashState.READ
+            return
         for i in range(FLASH_SIZE):
             self._data[i] = ERASED_BYTE
 
@@ -481,8 +505,8 @@ class AMD29F010:
         Runs the full AMD command sequence internally.
         Returns True on success.
         """
-        if not 0 <= sector < NUM_SECTORS:
-            log.error("Invalid sector index: %d", sector)
+        if type(sector) is not int or not 0 <= sector < NUM_SECTORS:
+            log.error("Invalid sector index: %r", sector)
             return False
 
         base = self.sector_base(sector)
@@ -502,6 +526,9 @@ class AMD29F010:
         Program a single byte using the full command sequence.
         Returns True on success.
         """
+        # Reject invalid target/data before even entering the unlock sequence.
+        self._validate_address(address)
+        self._validate_byte(value)
         self.write(CMD_ADDR_1, CMD_UNLOCK_1)
         self.write(CMD_ADDR_2, CMD_UNLOCK_2)
         self.write(CMD_ADDR_1, CMD_PROGRAM)
@@ -556,6 +583,7 @@ class AMD29F010:
         Verify flash contents match expected data.
         Returns (match, first_mismatch_offset).
         """
+        self._validate_address(offset)
         for i, b in enumerate(expected):
             addr = offset + i
             if addr >= FLASH_SIZE:
@@ -660,8 +688,8 @@ class BankedFlash:
 
     def select_bank(self, bank: int) -> bool:
         """Select a flash bank for subsequent CPU-addressed operations."""
-        if bank not in self.BANKS:
-            log.error("Invalid bank: 0x%02X", bank)
+        if type(bank) is not int or bank not in self.BANKS:
+            log.error("Invalid bank: %r", bank)
             return False
         self._current_bank = bank
         log.debug("Bank selected: 0x%02X", bank)
@@ -669,13 +697,14 @@ class BankedFlash:
 
     def cpu_to_flash_addr(self, cpu_addr: int, bank: int = None) -> int:
         """Convert CPU address + bank to flash linear address."""
-        bank = bank or self._current_bank
+        bank = self._current_bank if bank is None else bank
+        if type(bank) is not int or bank not in self.BANKS:
+            raise ValueError("Unknown flash bank")
         file_start, file_end, cpu_base = self.BANKS[bank]
-
-        if bank == 0x48:
-            return cpu_addr
-        else:
-            return file_start + (cpu_addr - cpu_base)
+        cpu_end = cpu_base + file_end - file_start
+        if type(cpu_addr) is not int or not cpu_base <= cpu_addr <= cpu_end:
+            raise ValueError(f"CPU address is outside bank 0x{bank:02X} window")
+        return file_start + (cpu_addr - cpu_base)
 
     def read(self, cpu_addr: int) -> int:
         flash_addr = self.cpu_to_flash_addr(cpu_addr)

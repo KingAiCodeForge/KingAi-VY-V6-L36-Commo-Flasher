@@ -54,7 +54,17 @@ older_versions/
 /_ai_work/
 /local/
 *.bin
+*.cal
+*.partial
+*.partial.json
+*.capture
+*.incomplete/
 *.xdl
+/flash_recovery_state.json
+/settings.local.json
 .env
 .env.*
 !.env.example
+
+# Local qualification runtime data
+.qualification-data/
