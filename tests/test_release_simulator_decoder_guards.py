@@ -99,3 +99,9 @@ def test_decoder_preserves_all_bytes_of_unknown_or_truncated_instructions():
         decoded = decoder.disassemble(source)
         assert all(inst.length > 0 for inst in decoded)
         assert b''.join(inst.raw_bytes for inst in decoded) == source
+
+
+@pytest.mark.parametrize('data', [0, 8, True, False])
+def test_decoder_rejects_integer_input_instead_of_fabricating_zero_bytes(data):
+    with pytest.raises(TypeError, match='byte data'):
+        HC11Disassembler().disassemble(data)
