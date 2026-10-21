@@ -67,26 +67,38 @@ ECHO_TIMEOUT = 0.5         # seconds
 # ALDL FRAME BUILDING
 # ═══════════════════════════════════════════════════════════════════════
 
-def compute_checksum(frame: bytearray) -> int:
-    """Compute ALDL checksum: two's complement of sum of all bytes mod 256."""
-    return (256 - (sum(frame[:-1]) & 0xFF)) & 0xFF
+def compute_checksum(frame: bytes | bytearray) -> int:
+    """ALDL two's complement of *all* bytes before the declared checksum.
+
+    Accepts a complete/padded ALDL frame or just its prefix through the final
+    payload byte; never drop another byte from an already sliced prefix.
+    """
+    if len(frame) < 3:
+        raise ValueError("ALDL frame is missing its header")
+    cs_pos = frame[1] - 83
+    if cs_pos < 3 or cs_pos > len(frame):
+        raise ValueError("ALDL declared checksum position is out of bounds")
+    return (-sum(frame[:cs_pos])) & 0xFF
 
 
 def apply_checksum(frame: bytearray) -> None:
-    """Apply checksum to the last byte of the frame."""
-    cs_pos = frame[1] - 83  # checksum position from length byte
-    frame[cs_pos] = compute_checksum(frame[:cs_pos])
+    """Apply the checksum to the declared wire frame, not the padded tail."""
+    if len(frame) < 4:
+        raise ValueError("ALDL frame is too short")
+    cs_pos = frame[1] - 83
+    if cs_pos < 3 or cs_pos >= len(frame):
+        raise ValueError("ALDL declared checksum storage is missing")
+    frame[cs_pos] = compute_checksum(frame)
 
 
 def verify_checksum(frame: bytes) -> bool:
-    """Verify ALDL frame checksum."""
-    if len(frame) < 3:
+    """Independently verify the complete on-wire additive checksum."""
+    if len(frame) < 4:
         return False
     cs_pos = frame[1] - 83
     if cs_pos < 3 or cs_pos >= len(frame):
         return False
-    expected = compute_checksum(bytearray(frame[:cs_pos]))
-    return frame[cs_pos] == expected
+    return (sum(frame[:cs_pos + 1]) & 0xFF) == 0
 
 
 def build_mode2_read(device_id: int, address: int, extended: bool = False) -> bytearray:
@@ -99,6 +111,8 @@ def build_mode2_read(device_id: int, address: int, extended: bool = False) -> by
     Frame format:
         [device_id, length_byte, 0x02, addr_hi, addr_lo, ..., checksum]
     """
+    if type(address) is not int or not (0 <= address <= (0xFFFFFF if extended else 0xFFFF)):
+        raise ValueError("Mode 2 address is outside the declared 16/24-bit range")
     frame = bytearray(FRAME_SIZE)
     frame[0] = device_id
     if extended:
@@ -252,10 +266,13 @@ class LoopbackALDL:
 
     def transact(self, frame: bytearray, timeout: float = DEFAULT_TIMEOUT) -> bytes | None:
         """Simulate ECU response for Mode 2 reads."""
+        # The loopback must enforce the same wire checksum as a real ECU.
+        if not verify_checksum(frame):
+            return None
         mode = frame[2]
 
         if mode == MODE8_SILENCE or mode == MODE9_UNSILENCE:
-            resp = bytearray([self.device_id, 0x56, mode])
+            resp = bytearray([self.device_id, 0x56, mode, 0x00])
             apply_checksum(resp)
             return bytes(resp[:resp[1] - 82])
 
