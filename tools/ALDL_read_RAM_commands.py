@@ -69,7 +69,7 @@ ECHO_TIMEOUT = 0.5         # seconds
 
 def compute_checksum(frame: bytearray) -> int:
     """Compute ALDL checksum: two's complement of sum of all bytes mod 256."""
-    return (256 - (sum(frame[:-1]) & 0xFF)) & 0xFF
+    return (-sum(frame)) & 0xFF
 
 
 def apply_checksum(frame: bytearray) -> None:
